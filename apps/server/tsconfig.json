@@ -4,8 +4,6 @@
     "noEmit": true,
     "paths": {
       "@/*": ["./src/*"]
-    },
-    "jsx": "react-jsx",
-    "jsxImportSource": "hono/jsx"
+    }
   }
 }

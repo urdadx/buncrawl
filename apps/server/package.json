@@ -13,9 +13,7 @@
   "dependencies": {
     "@buncrawl/api": "workspace:*",
     "@buncrawl/db": "workspace:*",
-    "@hono/trpc-server": "^0.4.2",
     "@trpc/server": "catalog:",
-    "hono": "^4.13.7",
     "libsql": "catalog:",
     "varlock": "catalog:",
     "zod": "catalog:"

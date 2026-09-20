@@ -163,15 +163,9 @@ importers:
       '@buncrawl/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@hono/trpc-server':
-        specifier: ^0.4.2
-        version: 0.4.2(@trpc/server@11.19.0(typescript@6.0.3))(hono@4.13.8)
       '@trpc/server':
         specifier: 'catalog:'
         version: 11.19.0(typescript@6.0.3)
-      hono:
-        specifier: ^4.13.7
-        version: 4.13.8
       libsql:
         specifier: 'catalog:'
         version: 0.5.29
@@ -948,13 +942,6 @@ packages:
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4
-
-  '@hono/trpc-server@0.4.2':
-    resolution: {integrity: sha512-3TDrc42CZLgcTFkXQba+y7JlRWRiyw1AqhLqztWyNS2IFT+3bHld0lxKdGBttCtGKHYx0505dM67RMazjhdZqw==}
-    engines: {node: '>=16.0.0'}
-    peerDependencies:
-      '@trpc/server': ^10.10.0 || >11.0.0-rc
-      hono: '>=4.0.0'
 
   '@internationalized/number@3.6.8':
     resolution: {integrity: sha512-8UmMFia46DUt+k97zKd9fKWXcWHR+k8ae3eYzILETuT2KbIvLyOfac7zesw+sJdRAAZ7Q9pM1Mk22aXp2LD0Ig==}
@@ -5569,11 +5556,6 @@ snapshots:
 
   '@hono/node-server@2.1.1(hono@4.13.8)':
     dependencies:
-      hono: 4.13.8
-
-  '@hono/trpc-server@0.4.2(@trpc/server@11.19.0(typescript@6.0.3))(hono@4.13.8)':
-    dependencies:
-      '@trpc/server': 11.19.0(typescript@6.0.3)
       hono: 4.13.8
 
   '@internationalized/number@3.6.8':
