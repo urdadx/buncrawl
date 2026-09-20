@@ -1,0 +1,71 @@
+name: buncrawl
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      secrets:
+        - web_env
+        - server_env
+      args:
+        VITE_SERVER_URL: http://localhost:3000
+    init: true
+    ports:
+      - "3001:80"
+    env_file:
+      - path: apps/web/.env
+        required: false
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+      secrets:
+        - web_env
+        - server_env
+    init: true
+    ports:
+      - "3000:3000"
+    env_file:
+      - path: apps/server/.env
+        required: false
+    environment:
+      CORS_ORIGIN: http://localhost:3001
+      DATABASE_URL: file:/data/local.db
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://localhost:3000/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - type: bind
+        source: ./.data
+        target: /data
+        bind:
+          create_host_path: false
+    restart: unless-stopped
+
+# BuildKit makes these available only while install/build commands run.
+secrets:
+  web_env:
+    file: apps/web/.env
+  server_env:
+    file: apps/server/.env

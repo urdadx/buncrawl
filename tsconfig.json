@@ -1,0 +1,3 @@
+{
+  "extends": "@buncrawl/config/tsconfig.base.json"
+}
