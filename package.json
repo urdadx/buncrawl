@@ -26,7 +26,7 @@
     "check": "oxlint && oxfmt --write"
   },
   "dependencies": {
-    "zod": "catalog:"
+    "valibot": "catalog:"
   },
   "devDependencies": {
     "@buncrawl/config": "workspace:*",

@@ -1,5 +1,5 @@
 {
-  "name": "@buncrawl/api",
+  "name": "@buncrawl/contracts",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
@@ -9,9 +9,6 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "@buncrawl/db": "workspace:*",
-    "@trpc/client": "catalog:",
-    "@trpc/server": "catalog:",
     "valibot": "catalog:"
   },
   "devDependencies": {

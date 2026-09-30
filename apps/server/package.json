@@ -15,8 +15,8 @@
     "@buncrawl/db": "workspace:*",
     "@trpc/server": "catalog:",
     "libsql": "catalog:",
-    "varlock": "catalog:",
-    "zod": "catalog:"
+    "valibot": "catalog:",
+    "varlock": "catalog:"
   },
   "devDependencies": {
     "@buncrawl/config": "workspace:*",
