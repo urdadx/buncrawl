@@ -116,4 +116,57 @@ describe("WebViewRenderer", () => {
       cdp: true,
     });
   });
+
+  test("passes validated proxy flags to a spawned Chrome process", async () => {
+    let receivedOptions: unknown;
+    const renderer = new WebViewRenderer({
+      chrome: {
+        proxyUrl: "socks5://proxy.example.com:1080",
+        argv: ["--lang=en-US"],
+      },
+      stabilityTimeoutMs: 0,
+      factory: (options) => {
+        receivedOptions = options;
+        return new FakeWebView();
+      },
+    });
+
+    await renderer.render({
+      url: "https://example.com",
+      deadline: new Deadline(1000),
+    });
+
+    expect(receivedOptions).toMatchObject({
+      backend: {
+        type: "chrome",
+        url: false,
+        argv: [
+          "--lang=en-US",
+          "--proxy-server=socks5://proxy.example.com:1080",
+          "--proxy-bypass-list=<-loopback>",
+        ],
+      },
+      dataStore: "ephemeral",
+    });
+  });
+
+  test.each([
+    "ftp://proxy.example.com:21",
+    "http://user:password@proxy.example.com:8080",
+    "http://proxy.example.com:8080/path",
+  ])("rejects unsafe or unsupported proxy configuration %s", (proxyUrl) => {
+    expect(() => new WebViewRenderer({ chrome: { proxyUrl } })).toThrow(WebViewRendererError);
+  });
+
+  test("rejects conflicting proxy launch flags", () => {
+    expect(
+      () =>
+        new WebViewRenderer({
+          chrome: {
+            proxyUrl: "http://proxy.example.com:8080",
+            argv: ["--proxy-server=http://other.example.com:8080"],
+          },
+        }),
+    ).toThrow("proxyUrl conflicts");
+  });
 });

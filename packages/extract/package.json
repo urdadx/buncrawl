@@ -1,0 +1,22 @@
+{
+  "name": "@buncrawl/extract",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "turndown": "7.2.4",
+    "turndown-plugin-gfm": "1.0.2"
+  },
+  "devDependencies": {
+    "@buncrawl/config": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/turndown": "5.0.6",
+    "typescript": "catalog:"
+  }
+}
