@@ -20,6 +20,31 @@ export interface CleanHtmlOptions {
   excludeSelectors?: readonly string[];
 }
 
+export function absolutizeHtmlUrls(html: string, documentUrl: string): string {
+  let baseUrl = documentUrl;
+  const rewriter = new HTMLRewriter();
+
+  rewriter.on("[href]", {
+    element(element) {
+      const href = element.getAttribute("href");
+      if (element.tagName === "base" && href) {
+        baseUrl = resolveUrl(href, documentUrl) ?? documentUrl;
+      }
+      rewriteUrlAttribute(element, "href", element.tagName === "base" ? documentUrl : baseUrl);
+    },
+  });
+
+  for (const attribute of ["src", "action", "formaction", "poster"] as const) {
+    rewriter.on(`[${attribute}]`, {
+      element(element) {
+        rewriteUrlAttribute(element, attribute, baseUrl);
+      },
+    });
+  }
+
+  return rewriter.transform(html);
+}
+
 export function cleanHtml(html: string, options: CleanHtmlOptions): string {
   const rewriter = new HTMLRewriter().on(ALWAYS_REMOVE, {
     element(element) {
@@ -86,5 +111,13 @@ function rewriteUrlAttribute(
     element.setAttribute(attribute, new URL(value, baseUrl).href);
   } catch {
     // Invalid document URLs are left untouched; they are content, not fetch targets.
+  }
+}
+
+function resolveUrl(value: string, baseUrl: string): string | undefined {
+  try {
+    return new URL(value, baseUrl).href;
+  } catch {
+    return undefined;
   }
 }

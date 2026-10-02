@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { cleanHtml } from "./clean";
+import { absolutizeHtmlUrls, cleanHtml } from "./clean";
 import { extractDocument } from "./extract";
 import { extractLinks } from "./links";
 import { htmlToMarkdown } from "./markdown";
@@ -61,6 +61,22 @@ describe("cleanHtml", () => {
     });
     expect(cleaned).toContain("Keep");
     expect(cleaned).not.toContain("Drop");
+  });
+});
+
+describe("absolutizeHtmlUrls", () => {
+  test("rewrites browser asset and navigation URLs without removing content", () => {
+    const html = absolutizeHtmlUrls(
+      '<html><head><base href="/app/"><link href="/_astro/site.css"><script src="scripts/app.js"></script></head><body><form action="submit"><img src="/logo.png"></form></body></html>',
+      "https://padyna.com/page",
+    );
+
+    expect(html).toContain('<base href="https://padyna.com/app/">');
+    expect(html).toContain('href="https://padyna.com/_astro/site.css"');
+    expect(html).toContain('src="https://padyna.com/app/scripts/app.js"');
+    expect(html).toContain('action="https://padyna.com/app/submit"');
+    expect(html).toContain('src="https://padyna.com/logo.png"');
+    expect(html).toContain("<script");
   });
 });
 

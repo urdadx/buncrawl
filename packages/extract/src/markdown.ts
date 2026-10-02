@@ -1,5 +1,9 @@
+import { createRequire } from "node:module";
 import TurndownService from "turndown";
-import { gfm } from "turndown-plugin-gfm";
+
+const { gfm } = createRequire(import.meta.url)("turndown-plugin-gfm") as {
+  gfm: (service: TurndownService) => void;
+};
 
 const turndown = new TurndownService({
   headingStyle: "atx",

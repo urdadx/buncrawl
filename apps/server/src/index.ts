@@ -3,6 +3,7 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 
 import { createContext } from "./context";
 import { ENV } from "./env.server";
+import { handleScrape } from "./routes/v1/scrape";
 
 const corsHeaders = {
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
@@ -76,6 +77,11 @@ const server = Bun.serve({
           router: appRouter,
           createContext,
         });
+      }),
+    "/v1/scrape": (request) =>
+      handle(request, () => {
+        const response = preflight(request);
+        return response ?? handleScrape(request);
       }),
   },
   fetch(request) {

@@ -160,9 +160,15 @@ importers:
       '@buncrawl/api':
         specifier: workspace:*
         version: link:../../packages/api
+      '@buncrawl/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@buncrawl/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@buncrawl/scrape':
+        specifier: workspace:*
+        version: link:../../packages/scrape
       '@trpc/server':
         specifier: 'catalog:'
         version: 11.19.0(typescript@6.0.3)
@@ -397,6 +403,37 @@ importers:
       '@buncrawl/core':
         specifier: workspace:*
         version: link:../core
+    devDependencies:
+      '@buncrawl/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.2
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+
+  packages/scrape:
+    dependencies:
+      '@buncrawl/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@buncrawl/core':
+        specifier: workspace:*
+        version: link:../core
+      '@buncrawl/extract':
+        specifier: workspace:*
+        version: link:../extract
+      '@buncrawl/fetcher':
+        specifier: workspace:*
+        version: link:../fetcher
+      '@buncrawl/renderer':
+        specifier: workspace:*
+        version: link:../renderer
+      '@buncrawl/security':
+        specifier: workspace:*
+        version: link:../security
     devDependencies:
       '@buncrawl/config':
         specifier: workspace:*

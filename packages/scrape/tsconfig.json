@@ -1,0 +1,6 @@
+{
+  "extends": "@buncrawl/config/tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true
+  }
+}

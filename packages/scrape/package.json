@@ -1,0 +1,25 @@
+{
+  "name": "@buncrawl/scrape",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@buncrawl/contracts": "workspace:*",
+    "@buncrawl/core": "workspace:*",
+    "@buncrawl/extract": "workspace:*",
+    "@buncrawl/fetcher": "workspace:*",
+    "@buncrawl/renderer": "workspace:*",
+    "@buncrawl/security": "workspace:*"
+  },
+  "devDependencies": {
+    "@buncrawl/config": "workspace:*",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}
