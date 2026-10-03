@@ -1,4 +1,5 @@
 # buncrawl
+
 Buncrawl is a web data API for AI agents, built with native Bun APIs.
 
 ## Tech Stack
@@ -10,7 +11,7 @@ Buncrawl is a web data API for AI agents, built with native Bun APIs.
 - **tRPC** - End-to-end type-safe APIs
 - **Bun** - Runtime environment
 - **Drizzle** - TypeScript-first ORM
-- **SQLite/Turso** - Database engine
+- **SQLite** - Database engine
 - **Oxlint** - Oxlint + Oxfmt (linting & formatting)
 
 ## Getting Started
@@ -48,7 +49,6 @@ pnpm run dev
 Open [http://localhost:3001](http://localhost:3001) in your browser to see the web application.
 The API is running at [http://localhost:3000](http://localhost:3000).
 
-
 ## Deployment
 
 ### Docker Compose
@@ -70,7 +70,7 @@ Docker Compose uses the local `./.data/local.db` file. Run `pnpm run db:push` be
 buncrawl/
 ├── apps/
 │   ├── web/         # Frontend application (React + TanStack Router)
-│   └── server/      # Backend API (Hono, TRPC)
+│   └── server/      # Backend API (Bun, TRPC)
 ├── packages/
 │   ├── ui/          # Shared shadcn/ui components and styles
 │   ├── api/         # API layer / business logic

@@ -9,15 +9,15 @@ import { absolutizeHtmlUrls, extractDocument } from "@buncrawl/extract";
 import { fetchPage, type FetchImplementation, type FetchPageResult } from "@buncrawl/fetcher";
 import {
   detectRenderNeed,
-  LightpandaRenderer,
+  createIsolatedDefaultRenderer,
   type Renderer,
   type RenderResult,
-  WebViewRenderer,
 } from "@buncrawl/renderer";
 import { type DnsResolver, validateResolvedUrl } from "@buncrawl/security";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_FORMATS: ScrapeFormat[] = ["markdown"];
+let defaultRenderer: Renderer | undefined;
 
 type FetchPage = typeof fetchPage;
 
@@ -130,8 +130,8 @@ export async function scrape(
 }
 
 function createDefaultRenderer(): Renderer {
-  const lightpanda = new LightpandaRenderer();
-  return lightpanda.capabilities().available ? lightpanda : new WebViewRenderer();
+  defaultRenderer ??= createIsolatedDefaultRenderer();
+  return defaultRenderer;
 }
 
 function isRenderedContentBetter(

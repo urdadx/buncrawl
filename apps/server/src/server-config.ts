@@ -1,0 +1,1 @@
+export const SERVER_IDLE_TIMEOUT_SECONDS = 120;

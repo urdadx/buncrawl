@@ -4,6 +4,7 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { createContext } from "./context";
 import { ENV } from "./env.server";
 import { handleScrape } from "./routes/v1/scrape";
+import { SERVER_IDLE_TIMEOUT_SECONDS } from "./server-config";
 
 const corsHeaders = {
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
@@ -49,6 +50,8 @@ async function handle(
   }
 }
 
+// a preflight request in HTTP is an automatic check sent by a browser using the OPTIONS
+// method to see if a server allows a cross-origin request before sending the actual data
 function preflight(request: Request): Response | undefined {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204 });
@@ -56,6 +59,7 @@ function preflight(request: Request): Response | undefined {
 }
 
 const server = Bun.serve({
+  idleTimeout: SERVER_IDLE_TIMEOUT_SECONDS,
   routes: {
     "/": (request) =>
       handle(request, () => {
