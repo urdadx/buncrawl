@@ -1,3 +1,9 @@
+import {
+  installBrowserNetworkGuard,
+  type BrowserNetworkGuard,
+  type BrowserNetworkSafetyOptions,
+  type CdpEvent,
+} from "./browser-safety";
 import type { RenderRequest, Renderer, RendererCapabilities, RenderResult } from "./renderer";
 
 const DEFAULT_WIDTH = 1280;
@@ -33,6 +39,9 @@ interface WebViewLike {
     format: "png";
     encoding: "base64";
   }): Promise<string | Blob | Buffer | { name: string; size: number }>;
+  cdp?(method: string, params?: Record<string, unknown>): Promise<unknown>;
+  addEventListener?(type: string, listener: (event: CdpEvent) => void): void;
+  removeEventListener?(type: string, listener: (event: CdpEvent) => void): void;
   close(): void;
 }
 
@@ -51,6 +60,7 @@ export interface WebViewRendererOptions {
   backend?: WebViewBackend;
   chrome?: ChromeLaunchOptions;
   stabilityTimeoutMs?: number;
+  networkSafety?: BrowserNetworkSafetyOptions | false;
   // creates a WebViewLike instance with the given options.
   // It allows for custom implementations of the WebView interface,
   // enabling flexibility in how the renderer interacts with different
@@ -83,6 +93,7 @@ export class WebViewRenderer implements Renderer {
   private readonly stabilityTimeoutMs: number;
   private readonly factory: WebViewFactory;
   private readonly customFactory: boolean;
+  private readonly networkSafety: BrowserNetworkSafetyOptions | false;
 
   constructor(options: WebViewRendererOptions = {}) {
     if (options.chrome && options.backend === "webkit") {
@@ -96,6 +107,7 @@ export class WebViewRenderer implements Renderer {
     this.stabilityTimeoutMs = options.stabilityTimeoutMs ?? DEFAULT_STABILITY_TIMEOUT_MS;
     this.factory = options.factory ?? createNativeWebView;
     this.customFactory = options.factory !== undefined;
+    this.networkSafety = options.networkSafety ?? {};
   }
 
   capabilities(): RendererCapabilities {
@@ -136,14 +148,36 @@ export class WebViewRenderer implements Renderer {
     // the only reliable way to interrupt navigation or evaluation at deadline.
     const abort = () => view.close();
     request.deadline.signal.addEventListener("abort", abort, { once: true });
+    let networkGuard: BrowserNetworkGuard | undefined;
 
     try {
       try {
+        if (this.networkSafety !== false) {
+          if (!view.cdp || !view.addEventListener || !view.removeEventListener) {
+            throw new WebViewRendererError(
+              "WEBVIEW_UNAVAILABLE",
+              "Safe browser request interception requires the Chromium backend",
+            );
+          }
+          await view.navigate("about:blank");
+          networkGuard = await installBrowserNetworkGuard(
+            {
+              cdp: view.cdp.bind(view),
+              addEventListener: view.addEventListener.bind(view),
+              removeEventListener: view.removeEventListener.bind(view),
+            },
+            request.deadline.signal,
+            this.networkSafety,
+          );
+        }
         await view.navigate(request.url);
+        await networkGuard?.settled();
+        networkGuard?.throwIfBlocked();
       } catch (cause) {
         if (request.deadline.signal.aborted) {
           throw request.deadline.signal.reason ?? cause;
         }
+        if (cause instanceof WebViewRendererError || hasSafetyErrorCode(cause)) throw cause;
         throw new WebViewRendererError(
           "WEBVIEW_NAVIGATION_FAILED",
           `WebView failed to navigate to ${request.url}`,
@@ -159,8 +193,12 @@ export class WebViewRenderer implements Renderer {
         Math.min(this.stabilityTimeoutMs, request.deadline.remainingMs),
         request.deadline.signal,
       );
+      await networkGuard?.settled();
+      networkGuard?.throwIfBlocked();
 
       const html = await view.evaluate("document.documentElement.outerHTML");
+      await networkGuard?.settled();
+      networkGuard?.throwIfBlocked();
       if (typeof html !== "string") {
         throw new WebViewRendererError(
           "WEBVIEW_INVALID_RESULT",
@@ -190,6 +228,7 @@ export class WebViewRenderer implements Renderer {
         ...(screenshot ? { screenshot } : {}),
       };
     } finally {
+      networkGuard?.close();
       request.deadline.signal.removeEventListener("abort", abort);
       view.close();
     }
@@ -258,6 +297,13 @@ function sleepWithinDeadline(ms: number, signal: AbortSignal): Promise<void> {
 
 function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) throw signal.reason ?? new Error("Render aborted");
+}
+
+function hasSafetyErrorCode(error: unknown): error is { code: string } {
+  if (typeof error !== "object" || error === null || !("code" in error)) return false;
+  return ["INVALID_URL", "BLOCKED_DESTINATION", "DNS_RESOLUTION_FAILED"].includes(
+    String(error.code),
+  );
 }
 
 function hasNativeWebView(): boolean {

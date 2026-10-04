@@ -79,4 +79,30 @@ describe("LightpandaRenderer", () => {
     await expect(promise).rejects.toBeInstanceOf(LightpandaRendererError);
     await expect(promise).rejects.toThrow("navigation failed");
   });
+
+  test("passes an upstream proxy without disabling private-network blocking", async () => {
+    let command: string[] = [];
+    const renderer = new LightpandaRenderer({
+      proxyUrl: "http://user:secret@proxy.example:8080",
+      runner: async (args) => {
+        command = args;
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            url: "https://example.com",
+            http_status: 200,
+            content: "<html></html>",
+            error: null,
+          }),
+          stderr: "",
+        };
+      },
+    });
+
+    await renderer.render({ url: "https://example.com", deadline: new Deadline(1000) });
+
+    expect(command).toContain("--block-private-networks");
+    expect(command).toContain("--http-proxy");
+    expect(command).toContain("http://user:secret@proxy.example:8080");
+  });
 });

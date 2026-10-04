@@ -10,7 +10,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@buncrawl/core": "workspace:*"
+    "@buncrawl/core": "workspace:*",
+    "@buncrawl/security": "workspace:*"
   },
   "devDependencies": {
     "@buncrawl/config": "workspace:*",

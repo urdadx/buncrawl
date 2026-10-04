@@ -403,6 +403,9 @@ importers:
       '@buncrawl/core':
         specifier: workspace:*
         version: link:../core
+      '@buncrawl/security':
+        specifier: workspace:*
+        version: link:../security
     devDependencies:
       '@buncrawl/config':
         specifier: workspace:*

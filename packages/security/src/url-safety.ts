@@ -35,6 +35,11 @@ export interface ResolveUrlOptions {
   signal?: AbortSignal; // allows the caller to abort the DNS resolution if it takes too long or if the request is canceled.
 }
 
+export interface ResolvedSafeUrl {
+  url: URL;
+  addresses: readonly string[];
+}
+
 export function validateUrl(input: string | URL): URL {
   const raw = typeof input === "string" ? input : input.href;
 
@@ -86,11 +91,18 @@ export async function validateResolvedUrl(
   input: string | URL,
   options: ResolveUrlOptions = {},
 ): Promise<URL> {
+  return (await resolveSafeUrl(input, options)).url;
+}
+
+export async function resolveSafeUrl(
+  input: string | URL,
+  options: ResolveUrlOptions = {},
+): Promise<ResolvedSafeUrl> {
   const url = validateUrl(input);
   const hostname = normalizeHostname(url.hostname);
 
   if (isIP(hostname) !== 0) {
-    return url;
+    return { url, addresses: [hostname] };
   }
 
   const resolver = options.resolver ?? systemResolver;
@@ -133,7 +145,7 @@ export async function validateResolvedUrl(
     }
   }
 
-  return url;
+  return { url, addresses };
 }
 
 //  validates a redirect URL, ensuring that it is a valid URL and that it does not point to a blocked destination.

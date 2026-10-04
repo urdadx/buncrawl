@@ -41,6 +41,8 @@ buncrawl/
 │   │   └── src/
 │   │       ├── index.ts
 │   │       ├── renderer.ts               # Replaceable renderer interface
+│   │       ├── browser-safety.ts          # CDP request and DNS enforcement
+│   │       ├── browser-safety.test.ts
 │   │       ├── detector.ts               # Decides when browser rendering is needed
 │   │       ├── detector.test.ts
 │   │       ├── isolated.ts               # Bounded subprocess worker pool
@@ -48,6 +50,8 @@ buncrawl/
 │   │       ├── lightpanda.ts              # Lightpanda CLI renderer
 │   │       ├── lightpanda.test.ts
 │   │       ├── renderer-worker.ts         # Isolated renderer worker entry point
+│   │       ├── safety-proxy.ts            # DNS-pinning Chromium proxy
+│   │       ├── safety-proxy.test.ts
 │   │       ├── webview.ts                # Bun.WebView Chrome/WebKit adapter
 │   │       └── webview.test.ts
 │   │
@@ -128,6 +132,11 @@ Detector classifies returned HTML
 - Cancellation terminates the active worker; worker and browser crashes receive one fresh-worker retry.
 - Each worker is created with one immutable renderer and proxy configuration.
 - Lightpanda browser requests use `--block-private-networks`.
+- Chromium pauses every navigation and subresource through CDP and validates its URL and current DNS answers before continuing.
+- Chromium traffic is forced through a worker-local proxy that connects to the exact validated IP while preserving the original TLS hostname.
+- Safe WebView rendering requires Chromium; WebKit fails closed because it cannot intercept requests through CDP.
+- `BUNCRAWL_PROXY_URL` routes Lightpanda or Chromium through an HTTP, HTTPS, SOCKS4, or SOCKS5 upstream proxy.
+- Chromium chains through the worker-local safety proxy, which sends the validated destination IP upstream while preserving Host and TLS SNI.
 - Rendered and fetched raw HTML resolve relative `href`, `src`, `action`, `formaction`, and `poster` attributes against the final URL and honor `<base href>`.
 - Proxy-required browser rendering must never fall back to direct traffic.
 - WebView uses ephemeral storage by default.
@@ -205,19 +214,29 @@ Implement `apps/server/src/routes/v1/scrape.ts`:
 - Retry browser and worker crashes once in a fresh process while preserving the original deadline.
 - Test queue limits, worker reuse, page and RSS recycling, cancellation, and crash retry.
 
-### 8. Browser Network Safety
+### 8. Browser Network Safety -> DONE
 
-- Validate browser redirects and subresource destinations through Chrome CDP events.
-- Verify Lightpanda and Chromium block private, loopback, link-local, and metadata addresses.
-- Ensure proxy-required requests fail closed.
-- Add browser SSRF, redirect, and DNS-rebinding integration tests.
+- Pause and validate Chromium navigation, redirect, and subresource requests through CDP `Fetch.requestPaused` events.
+- Resolve every HTTP(S) request immediately before continuing it and block private, loopback, link-local, metadata, and invalid destinations.
+- Re-resolve repeated hostnames instead of trusting a previous DNS result.
+- Require Chromium for safe WebView rendering and fail closed when request interception is unavailable.
+- Route Chrome proxy traffic without implicit loopback bypass and never retry it as a direct request.
+- Use Lightpanda's `--block-private-networks` enforcement for its browser path.
+- Test public requests, private destinations, metadata addresses, redirects, repeated DNS resolution, and unavailable interception.
+- Route Chromium through a worker-local HTTP CONNECT proxy that resolves, validates, and pins every destination connection to the approved IP.
+- Preserve the original hostname inside HTTPS tunnels so TLS certificate and SNI validation remain intact.
+- Disable cross-target plain HTTP connection reuse and strip proxy credentials before forwarding.
+- Chain HTTP, HTTPS, SOCKS4, and SOCKS5 upstream proxies using the validated destination IP.
+- Support Basic authentication for HTTP/HTTPS and username/password authentication for SOCKS5.
+- Fail closed when an upstream proxy is unavailable or rejects a connection; never retry through direct traffic.
+- Bound direct, TLS, CONNECT, and SOCKS connection handshakes so a stalled proxy cannot consume the full render budget.
+- Test pinned connections, private and metadata destinations, redirects, and DNS rebinding before upstream connection.
 
 ### 9. Renderer Reliability
 
 - Fall back to Bun.WebView when Lightpanda is available but fails at runtime.
 - Avoid navigating twice when Lightpanda returns both HTML and a screenshot.
 - Expose the concrete renderer name instead of reporting every browser renderer as `webview`.
-- Add Lightpanda proxy configuration.
 - Add real-site integration tests for both browser backends.
 
 ### 10. Extraction Quality

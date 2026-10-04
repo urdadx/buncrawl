@@ -3,13 +3,44 @@ import { Deadline } from "@buncrawl/core";
 import type { IsolatedRendererConfig, WorkerRenderRequest } from "./isolated";
 import { LightpandaRenderer } from "./lightpanda";
 import type { Renderer } from "./renderer";
+import { BrowserSafetyProxy } from "./safety-proxy";
 import { WebViewRenderer } from "./webview";
 
 const config = parseConfig(process.env.BUNCRAWL_RENDERER_CONFIG);
-const renderer: Renderer =
-  config.type === "lightpanda"
-    ? new LightpandaRenderer(config.options)
-    : new WebViewRenderer(config.options);
+let safetyProxy: BrowserSafetyProxy | undefined;
+let renderer: Renderer;
+
+if (config.type === "lightpanda") {
+  renderer = new LightpandaRenderer(config.options);
+} else {
+  if (config.options?.backend === "webkit") {
+    throw new Error("Safe isolated WebView rendering requires Chromium");
+  }
+  if (
+    config.options?.chrome?.proxyBypassList &&
+    config.options.chrome.proxyBypassList !== "<-loopback>"
+  ) {
+    throw new Error(
+      "External proxy bypass rules are incompatible with browser network safety",
+    );
+  }
+  const { proxyUrl: upstreamProxy, proxyBypassList: _proxyBypassList, ...chrome } =
+    config.options?.chrome ?? {};
+  safetyProxy = await BrowserSafetyProxy.start({
+    ...(upstreamProxy ? { upstreamProxy } : {}),
+  });
+  renderer = new WebViewRenderer({
+    ...config.options,
+    backend: "chrome",
+    chrome: {
+      ...chrome,
+      proxyUrl: safetyProxy.url,
+      proxyBypassList: "<-loopback>",
+    },
+  });
+}
+
+process.on("disconnect", () => safetyProxy?.close());
 
 process.on("message", async (message: unknown) => {
   if (!isWorkerRequest(message)) return;

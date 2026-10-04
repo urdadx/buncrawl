@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   UrlSafetyError,
   isBlockedIp,
+  resolveSafeUrl,
   validateRedirectUrl,
   validateResolvedUrl,
   validateUrl,
@@ -61,6 +62,14 @@ describe("validateResolvedUrl", () => {
       resolver: async () => ["93.184.216.34", "2606:4700:4700::1111"],
     });
     expect(url.hostname).toBe("example.com");
+  });
+
+  test("returns validated addresses for connection pinning", async () => {
+    const resolved = await resolveSafeUrl("https://example.com", {
+      resolver: async () => ["93.184.216.34", "2606:4700:4700::1111"],
+    });
+    expect(resolved.url.hostname).toBe("example.com");
+    expect(resolved.addresses).toEqual(["93.184.216.34", "2606:4700:4700::1111"]);
   });
 
   test("fails closed when any DNS answer is private", async () => {

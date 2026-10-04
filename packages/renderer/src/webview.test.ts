@@ -8,6 +8,7 @@ class FakeWebView {
   title = "Rendered title";
   closed = false;
   evaluations = 0;
+  private readonly listeners = new Map<string, Set<(event: { data?: unknown }) => void>>();
 
   async navigate(url: string) {
     this.url = `${url}/final`;
@@ -23,6 +24,22 @@ class FakeWebView {
 
   async screenshot() {
     return "cG5n";
+  }
+
+  async cdp() {}
+
+  addEventListener(type: string, listener: (event: { data?: unknown }) => void) {
+    const listeners = this.listeners.get(type) ?? new Set();
+    listeners.add(listener);
+    this.listeners.set(type, listeners);
+  }
+
+  removeEventListener(type: string, listener: (event: { data?: unknown }) => void) {
+    this.listeners.get(type)?.delete(listener);
+  }
+
+  emit(type: string, data: unknown) {
+    for (const listener of this.listeners.get(type) ?? []) listener({ data });
   }
 
   close() {
@@ -102,6 +119,50 @@ describe("WebViewRenderer", () => {
       }),
     ).rejects.toThrow("client disconnected");
     expect(created).toBe(false);
+  });
+
+  test("fails closed when Chromium request interception is unavailable", async () => {
+    const renderer = new WebViewRenderer({
+      factory: () => ({
+        url: "",
+        title: "",
+        async navigate() {},
+        async evaluate() {
+          return "<html></html>";
+        },
+        async screenshot() {
+          return "cG5n";
+        },
+        close() {},
+      }),
+    });
+
+    await expect(
+      renderer.render({ url: "https://example.com", deadline: new Deadline(1000) }),
+    ).rejects.toMatchObject({ code: "WEBVIEW_UNAVAILABLE" });
+  });
+
+  test("blocks a browser navigation that resolves to a private address", async () => {
+    const view = new FakeWebView();
+    view.navigate = async (url) => {
+      view.url = url;
+      if (url !== "about:blank") {
+        view.emit("Fetch.requestPaused", {
+          requestId: "navigation",
+          request: { url },
+        });
+      }
+    };
+    const renderer = new WebViewRenderer({
+      backend: "chrome",
+      factory: () => view,
+      networkSafety: { resolver: async () => ["127.0.0.1"] },
+    });
+
+    await expect(
+      renderer.render({ url: "https://rebind.example", deadline: new Deadline(1000) }),
+    ).rejects.toMatchObject({ code: "BLOCKED_DESTINATION" });
+    expect(view.closed).toBe(true);
   });
 
   test("reports Chrome-only CDP capability correctly", () => {

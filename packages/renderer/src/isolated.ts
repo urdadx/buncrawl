@@ -10,11 +10,11 @@ const DEFAULT_MAX_RSS_BYTES = 512 * 1024 * 1024;
 export type IsolatedRendererConfig =
   | {
       type: "lightpanda";
-      options?: Pick<LightpandaRendererOptions, "executable" | "waitMs">;
+      options?: Pick<LightpandaRendererOptions, "executable" | "waitMs" | "proxyUrl">;
     }
   | {
       type: "webview";
-      options?: Omit<WebViewRendererOptions, "factory">;
+      options?: Omit<WebViewRendererOptions, "factory" | "networkSafety">;
     };
 
 export interface WorkerRenderRequest {
@@ -221,13 +221,26 @@ export class IsolatedRenderer implements Renderer {
 export function createIsolatedDefaultRenderer(
   options: IsolatedRendererOptions = {},
 ): IsolatedRenderer {
-  const lightpanda = new LightpandaRenderer();
+  const proxyUrl = process.env.BUNCRAWL_PROXY_URL;
+  const lightpanda = new LightpandaRenderer(proxyUrl ? { proxyUrl } : {});
   if (lightpanda.capabilities().available) {
-    return new IsolatedRenderer({ type: "lightpanda" }, lightpanda.capabilities(), options);
+    return new IsolatedRenderer(
+      { type: "lightpanda", ...(proxyUrl ? { options: { proxyUrl } } : {}) },
+      lightpanda.capabilities(),
+      options,
+    );
   }
 
-  const webview = new WebViewRenderer();
-  return new IsolatedRenderer({ type: "webview" }, webview.capabilities(), options);
+  const chrome = proxyUrl ? { proxyUrl } : undefined;
+  const safeWebview = new WebViewRenderer({ backend: "chrome" });
+  return new IsolatedRenderer(
+    {
+      type: "webview",
+      options: { backend: "chrome", ...(chrome ? { chrome } : {}) },
+    },
+    safeWebview.capabilities(),
+    options,
+  );
 }
 
 interface WorkerResponse {

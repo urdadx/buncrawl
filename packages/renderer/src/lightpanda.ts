@@ -20,6 +20,7 @@ type CommandRunner = (args: string[], signal: AbortSignal) => Promise<CommandRes
 export interface LightpandaRendererOptions {
   executable?: string;
   waitMs?: number;
+  proxyUrl?: string;
   runner?: CommandRunner;
 }
 
@@ -46,12 +47,14 @@ export class LightpandaRenderer implements Renderer {
   private readonly waitMs: number;
   private readonly runner: CommandRunner;
   private readonly customRunner: boolean;
+  private readonly proxyUrl?: string;
 
   constructor(options: LightpandaRendererOptions = {}) {
     this.executable = options.executable ?? "lightpanda";
     this.waitMs = options.waitMs ?? DEFAULT_WAIT_MS;
     this.runner = options.runner ?? runCommand;
     this.customRunner = options.runner !== undefined;
+    this.proxyUrl = options.proxyUrl;
   }
 
   capabilities(): RendererCapabilities {
@@ -115,6 +118,7 @@ export class LightpandaRenderer implements Renderer {
         "--terminate-ms",
         String(remainingMs),
         "--block-private-networks",
+        ...(this.proxyUrl ? ["--http-proxy", this.proxyUrl] : []),
       ],
       request.deadline.signal,
     );
