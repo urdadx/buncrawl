@@ -1,10 +1,10 @@
+/*
+This file maitains a safety proxy that can be used to forward HTTP and HTTPS requests from a browser view to their intended destinations, while enforcing security policies such as DNS resolution, upstream proxying, and request filtering. The proxy listens on a local TCP port and accepts connections from the browser view, forwarding requests to the target servers or upstream proxies as needed. It also handles CONNECT tunnels for HTTPS requests and supports SOCKS4 and SOCKS5 proxies.
+
+*/
+
 import { type DnsResolver, resolveSafeUrl, type ResolveUrlOptions } from "@buncrawl/security";
-import {
-  createConnection,
-  createServer,
-  type Server,
-  type Socket,
-} from "node:net";
+import { createConnection, createServer, type Server, type Socket } from "node:net";
 import { connect as createTlsConnection } from "node:tls";
 
 const MAX_HEADER_BYTES = 64 * 1024;
@@ -159,7 +159,8 @@ export class BrowserSafetyProxy {
   }
 
   private connect(address: string, port: number): Promise<Socket> {
-    const socket = this.options.connect?.(address, port) ?? createConnection({ host: address, port });
+    const socket =
+      this.options.connect?.(address, port) ?? createConnection({ host: address, port });
     return new Promise((resolve, reject) => {
       const timer = setTimeout(
         () => failed(new Error("Destination connection timed out")),
@@ -216,7 +217,11 @@ export class BrowserSafetyProxy {
             : 80),
     );
     if (proxy.protocol === "https:") {
-      const socket = createTlsConnection({ host: proxy.hostname, port, servername: proxy.hostname });
+      const socket = createTlsConnection({
+        host: proxy.hostname,
+        port,
+        servername: proxy.hostname,
+      });
       return waitForConnection(socket, "secureConnect", this.handshakeTimeoutMs);
     }
     return waitForConnection(
@@ -299,9 +304,7 @@ function pipeSockets(client: Socket, upstream: Socket): void {
 
 function rejectClient(client: Socket, status: number, reason: string): void {
   if (client.destroyed) return;
-  client.end(
-    `HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`,
-  );
+  client.end(`HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
 }
 
 function validateUpstreamProxy(value: string): URL {

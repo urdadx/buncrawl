@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { FetchPageOptions, FetchPageResult } from "@buncrawl/fetcher";
-import type { Renderer, RenderRequest, RenderResult } from "@buncrawl/renderer";
+import { RendererChain, type Renderer, type RenderRequest, type RenderResult } from "@buncrawl/renderer";
 
 import { scrape } from "./scrape";
 
@@ -97,6 +97,49 @@ describe("scrape", () => {
     expect(response.data.metadata.renderer).toBe("webview");
     expect(response.data.markdown).toContain("Rendered page");
     expect(renderer.calls).toHaveLength(1);
+  });
+
+  test("escalates inadequate Lightpanda output to WebView", async () => {
+    const lightpanda = new FakeRenderer({
+      ...renderedPage,
+      html: '<html><body><div class="spinner">Loading...</div></body></html>',
+      renderer: "lightpanda",
+    });
+    const webview = new FakeRenderer({
+      ...renderedPage,
+      html: `<html><body><h1>Complete article</h1><p>${"Useful content. ".repeat(30)}</p></body></html>`,
+      renderer: "webview",
+    });
+    const response = await scrape(
+      { url: "https://example.com", renderJs: "auto" },
+      {},
+      {
+        fetch: async () =>
+          fetched('<html><body><div id="root"></div><script src="/app.js"></script></body></html>'),
+        renderer: new RendererChain([lightpanda, webview]),
+      },
+    );
+
+    expect(response).toMatchObject({
+      success: true,
+      data: { metadata: { renderer: "webview" } },
+    });
+    expect(lightpanda.calls).toHaveLength(1);
+    expect(webview.calls).toHaveLength(1);
+  });
+
+  test("reports Lightpanda as the concrete renderer", async () => {
+    const renderer = new FakeRenderer({ ...renderedPage, renderer: "lightpanda" });
+    const response = await scrape(
+      { url: "https://example.com", renderJs: true },
+      { resolver: async () => ["93.184.216.34"] },
+      { renderer },
+    );
+
+    expect(response).toMatchObject({
+      success: true,
+      data: { metadata: { renderer: "lightpanda" } },
+    });
   });
 
   test("never invokes the renderer when renderJs is false", async () => {

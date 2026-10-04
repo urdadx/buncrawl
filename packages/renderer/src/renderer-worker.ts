@@ -20,15 +20,14 @@ if (config.type === "lightpanda") {
     config.options?.chrome?.proxyBypassList &&
     config.options.chrome.proxyBypassList !== "<-loopback>"
   ) {
-    throw new Error(
-      "External proxy bypass rules are incompatible with browser network safety",
-    );
+    throw new Error("External proxy bypass rules are incompatible with browser network safety");
   }
-  const { proxyUrl: upstreamProxy, proxyBypassList: _proxyBypassList, ...chrome } =
-    config.options?.chrome ?? {};
-  safetyProxy = await BrowserSafetyProxy.start({
-    ...(upstreamProxy ? { upstreamProxy } : {}),
-  });
+  const {
+    proxyUrl: upstreamProxy,
+    proxyBypassList: _proxyBypassList,
+    ...chrome
+  } = config.options?.chrome ?? {};
+  safetyProxy = await BrowserSafetyProxy.start(upstreamProxy ? { upstreamProxy } : {});
   renderer = new WebViewRenderer({
     ...config.options,
     backend: "chrome",
@@ -82,9 +81,6 @@ function isWorkerRequest(value: unknown): value is { id: number; request: Worker
 
 function hasErrorCode(error: unknown): error is { code: string } {
   return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    typeof error.code === "string"
+    typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
   );
 }

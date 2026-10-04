@@ -125,7 +125,8 @@ Detector classifies returned HTML
 - One deadline covers validation, fetch, rendering, and extraction.
 - A failed or empty browser result must not replace usable fetched content.
 - Lightpanda is preferred when its executable is available; Bun.WebView is the availability fallback.
-- A Lightpanda runtime failure does not currently trigger a second attempt with Bun.WebView.
+- A Lightpanda runtime failure triggers a Chromium attempt when WebView is available.
+- Lightpanda output that fails quality checks escalates to Chromium within the same deadline.
 - Lightpanda runs as a subprocess and inherits the request deadline and cancellation signal.
 - Browser rendering runs in dedicated Bun worker subprocesses with one active view per worker.
 - The worker pool bounds concurrency and queued requests, and recycles workers by page count or RSS.
@@ -232,12 +233,13 @@ Implement `apps/server/src/routes/v1/scrape.ts`:
 - Bound direct, TLS, CONNECT, and SOCKS connection handshakes so a stalled proxy cannot consume the full render budget.
 - Test pinned connections, private and metadata destinations, redirects, and DNS rebinding before upstream connection.
 
-### 9. Renderer Reliability
+### 9. Renderer Reliability -> DONE
 
-- Fall back to Bun.WebView when Lightpanda is available but fails at runtime.
-- Avoid navigating twice when Lightpanda returns both HTML and a screenshot.
-- Expose the concrete renderer name instead of reporting every browser renderer as `webview`.
-- Add real-site integration tests for both browser backends.
+- Fall back to Bun.WebView when Lightpanda fails at runtime or returns inadequate content.
+- Preserve one end-to-end deadline across all renderer attempts and never retry terminal URL-safety errors.
+- Prefer WebView for screenshots because it captures HTML and PNG from one navigation; retain Lightpanda only as a last-resort screenshot backend.
+- Expose the concrete `lightpanda` or `webview` renderer in response metadata.
+- Add opt-in real-site smoke tests for both backends with `BUNCRAWL_RUN_BROWSER_INTEGRATION=1`.
 
 ### 10. Extraction Quality
 

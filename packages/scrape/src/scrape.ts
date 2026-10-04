@@ -10,6 +10,7 @@ import { fetchPage, type FetchImplementation, type FetchPageResult } from "@bunc
 import {
   detectRenderNeed,
   createIsolatedDefaultRenderer,
+  isFallbackRenderer,
   type Renderer,
   type RenderResult,
 } from "@buncrawl/renderer";
@@ -84,11 +85,17 @@ export async function scrape(
         warning = "Browser rendering was unavailable; returned fetched content";
       } else {
         try {
-          const candidate = await renderer.render({
+          const renderRequest = {
             url: fetched?.finalUrl ?? forcedRenderUrl?.href ?? request.url,
             deadline,
             screenshot: screenshotRequested,
-          });
+          };
+          const accept = (candidate: RenderResult) =>
+            (!screenshotRequested || candidate.screenshot !== undefined) &&
+            isRenderedContentBetter(candidate, fetched, fetchedDecision);
+          const candidate = isFallbackRenderer(renderer)
+            ? await renderer.renderWithFallback(renderRequest, accept)
+            : await renderer.render(renderRequest);
           if (browserRequired || isRenderedContentBetter(candidate, fetched, fetchedDecision)) {
             rendered = candidate;
           } else {
@@ -170,7 +177,7 @@ function buildDocument(
       title: extracted.metadata.title ?? rendered?.title,
       statusCode: fetched?.statusCode ?? 200,
       contentType: fetched?.contentType ?? "text/html",
-      renderer: rendered ? "webview" : "fetch",
+      renderer: rendered?.renderer ?? "fetch",
     },
   };
 

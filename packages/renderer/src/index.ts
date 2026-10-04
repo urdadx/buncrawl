@@ -1,4 +1,5 @@
 export * from "./browser-safety";
+export * from "./chain";
 export * from "./detector";
 export * from "./isolated";
 export * from "./lightpanda";

@@ -50,7 +50,7 @@ export interface ScrapeDocument {
     title?: string;
     statusCode: number;
     contentType?: string;
-    renderer: "fetch" | "webview";
+    renderer: string;
   };
 }
 
