@@ -186,9 +186,14 @@ function buildDocument(
   if (formats.includes("rawHtml")) document.rawHtml = rawHtml;
   if (formats.includes("links")) document.links = extracted.links;
   if (formats.includes("screenshots") && rendered?.screenshot) {
-    document.screenshot = rendered.screenshot.data;
+    document.screenshot = screenshotDataUrl(rendered.screenshot);
   }
   return document;
+}
+
+function screenshotDataUrl(screenshot: NonNullable<RenderResult["screenshot"]>): string {
+  if (screenshot.data.startsWith("data:")) return screenshot.data;
+  return `data:${screenshot.mimeType};base64,${screenshot.data}`;
 }
 
 function errorCode(error: unknown, deadline: Deadline, parentSignal?: AbortSignal): string {

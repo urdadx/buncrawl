@@ -43,6 +43,7 @@ export interface ScrapeDocument {
   html?: string;
   rawHtml?: string;
   links?: string[];
+  /** PNG data URL (`data:image/png;base64,...`). */
   screenshot?: string;
   metadata: {
     sourceURL: string;

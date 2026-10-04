@@ -245,7 +245,7 @@ describe("scrape", () => {
     });
   });
 
-  test("requests a screenshot and returns its base64 data", async () => {
+  test("requests a screenshot and returns a PNG data URL", async () => {
     const renderer = new FakeRenderer({
       ...renderedPage,
       screenshot: { data: "cG5n", mimeType: "image/png" },
@@ -256,8 +256,28 @@ describe("scrape", () => {
       { fetch: async () => fetched("unused"), renderer },
     );
 
-    expect(response).toMatchObject({ success: true, data: { screenshot: "cG5n" } });
+    expect(response).toMatchObject({
+      success: true,
+      data: { screenshot: "data:image/png;base64,cG5n" },
+    });
     expect(renderer.calls[0]?.screenshot).toBe(true);
+  });
+
+  test("does not duplicate an existing screenshot data URL prefix", async () => {
+    const renderer = new FakeRenderer({
+      ...renderedPage,
+      screenshot: { data: "data:image/png;base64,cG5n", mimeType: "image/png" },
+    });
+    const response = await scrape(
+      { url: "https://example.com", formats: ["screenshots"] },
+      {},
+      { fetch: async () => fetched("unused"), renderer },
+    );
+
+    expect(response).toMatchObject({
+      success: true,
+      data: { screenshot: "data:image/png;base64,cG5n" },
+    });
   });
 
   test("rejects screenshots when rendering is disabled", async () => {

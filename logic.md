@@ -239,6 +239,7 @@ Implement `apps/server/src/routes/v1/scrape.ts`:
 - Preserve one end-to-end deadline across all renderer attempts and never retry terminal URL-safety errors.
 - Prefer WebView for screenshots because it captures HTML and PNG from one navigation; retain Lightpanda only as a last-resort screenshot backend.
 - Expose the concrete `lightpanda` or `webview` renderer in response metadata.
+- Return screenshots as directly usable `data:image/png;base64,...` URLs.
 - Add opt-in real-site smoke tests for both backends with `BUNCRAWL_RUN_BROWSER_INTEGRATION=1`.
 
 ### 10. Extraction Quality
