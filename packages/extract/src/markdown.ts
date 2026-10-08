@@ -34,6 +34,7 @@ export function htmlToMarkdown(html: string): string {
 function normalizeMarkdown(markdown: string): string {
   return markdown
     .replace(/\r\n?/g, "\n")
+    .replace(/\u00a0/g, " ")
     .replace(/^(\s*[-+*]) {2,}/gm, "$1 ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();

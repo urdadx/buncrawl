@@ -143,6 +143,7 @@ Detector classifies returned HTML
 - WebView uses ephemeral storage by default.
 - Chrome proxy configuration is process-scoped and requires isolated Bun processes for different proxies.
 - Browser availability is optional; HTTP-only scraping must still work without Lightpanda or Chrome.
+- Main-content extraction compares deterministic cleanup with Readability and only accepts Readability when quality improves without excessive content loss.
 
 ## Immediate Remaining Work
 
@@ -242,12 +243,14 @@ Implement `apps/server/src/routes/v1/scrape.ts`:
 - Return screenshots as directly usable `data:image/png;base64,...` URLs.
 - Add opt-in real-site smoke tests for both backends with `BUNCRAWL_RUN_BROWSER_INTEGRATION=1`.
 
-### 10. Extraction Quality
+### 10. Extraction Quality -> DONE
 
-- Add a representative HTML-to-Markdown fixture corpus.
-- Test tables, nested lists, code blocks, malformed HTML, entities, `srcset`, CSS URLs, and large documents.
-- Compare output against Firecrawl and fastCRW samples.
-- Add readability/main-content fallback if HTMLRewriter cleanup is insufficient.
+- DONE: Add a representative HTML-to-Markdown fixture corpus.
+- DONE: Test tables, nested lists, code blocks, malformed HTML, entities, `srcset`, CSS URLs, and large documents.
+- DONE: Compare output against Firecrawl and fastCRW samples.
+- DONE: Add readability/main-content fallback if HTMLRewriter cleanup is insufficient.
+- DONE: Score cleaned and Readability candidates using text retention, semantic coverage, structure, and link density.
+- DONE: Protect card listings, multi-post forums, and reference-heavy articles from single-candidate content collapse.
 
 ### 11. Linux Deployment
 
@@ -259,6 +262,13 @@ Implement `apps/server/src/routes/v1/scrape.ts`:
 
 ## Later Work
 
+- Extraction quality phase 2:
+  - Normalize complex tables with `rowspan`, `colspan`, ragged rows, and tables nested in lists.
+  - Promote lazy-loaded `data-src` and `data-srcset` media attributes when canonical attributes are absent.
+  - Replace comma splitting with standards-aware `srcset` parsing, including data URLs.
+  - Expand boilerplate detection for breadcrumbs, newsletters, social controls, comments, modals, widgets, pagination, and sticky promotions.
+  - Refine title recovery using visible headings, Open Graph metadata, and site-suffix removal.
+  - Expose extraction strategy, candidate scores, retention ratio, and selection reason as diagnostics.
 - SQLite-backed scrape, crawl, and batch jobs.
 - Crawl frontier, robots.txt, sitemaps, deduplication, and per-host limits.
 - Redis-backed distributed workers.
