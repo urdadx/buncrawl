@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@buncrawl/api": "workspace:*",
+    "@buncrawl/artifacts": "workspace:*",
     "@buncrawl/contracts": "workspace:*",
     "@buncrawl/db": "workspace:*",
     "@buncrawl/scrape": "workspace:*",

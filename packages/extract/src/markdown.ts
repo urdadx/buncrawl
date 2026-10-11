@@ -1,9 +1,6 @@
-import { createRequire } from "node:module";
 import TurndownService from "turndown";
-
-const { gfm } = createRequire(import.meta.url)("turndown-plugin-gfm") as {
-  gfm: (service: TurndownService) => void;
-};
+// @ts-ignore The package ships no declarations; this static import is required by bun build --compile.
+import { gfm } from "turndown-plugin-gfm";
 
 const turndown = new TurndownService({
   headingStyle: "atx",

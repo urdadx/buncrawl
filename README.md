@@ -62,7 +62,8 @@ The API is running at [http://localhost:3000](http://localhost:3000).
 
 Environment variables are read from each app's `.env` file (baked into web builds for public variables) and overridden in `docker-compose.yml` for container networking.
 
-Docker Compose uses the local `./.data/local.db` file. Run `pnpm run db:push` before starting the stack.
+Docker Compose persists SQLite at `./.data/buncrawl.db` and artifacts under
+`./.data/artifacts`. The server applies its required storage schema during startup.
 
 ## Project Structure
 

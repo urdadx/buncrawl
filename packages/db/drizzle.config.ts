@@ -6,6 +6,7 @@ export default defineConfig({
   out: "./src/migrations",
   dialect: "turso",
   dbCredentials: {
-    url: process.env.DATABASE_URL || "",
+    url: process.env.DATABASE_URL || "file:/data/buncrawl.db",
+    ...(process.env.DATABASE_AUTH_TOKEN ? { authToken: process.env.DATABASE_AUTH_TOKEN } : {}),
   },
 });

@@ -3,8 +3,12 @@ import { scrape } from "@buncrawl/scrape";
 import * as v from "valibot";
 
 type Scrape = (request: ScrapeRequest, context: { signal: AbortSignal }) => Promise<ScrapeResponse>;
+type PersistScreenshot = (dataUrl: string, signal?: AbortSignal) => Promise<string>;
 
-export function createScrapeHandler(scrapePage: Scrape = scrape) {
+export function createScrapeHandler(
+  scrapePage: Scrape = scrape,
+  persist: PersistScreenshot = persistScreenshotDefault,
+) {
   return async function handleScrape(request: Request): Promise<Response> {
     if (request.method !== "POST") {
       return json(
@@ -38,11 +42,30 @@ export function createScrapeHandler(scrapePage: Scrape = scrape) {
     }
 
     const response = await scrapePage(parsed.output, { signal: request.signal });
+    if (response.success && response.data.screenshot) {
+      try {
+        await persist(response.data.screenshot, request.signal);
+      } catch (error) {
+        return json(
+          {
+            success: false,
+            code: "ARTIFACT_STORE_FAILED",
+            error: error instanceof Error ? error.message : "Failed to store screenshot",
+          },
+          500,
+        );
+      }
+    }
     return json(response, response.success ? 200 : statusForError(response.code));
   };
 }
 
 export const handleScrape = createScrapeHandler();
+
+async function persistScreenshotDefault(dataUrl: string, signal?: AbortSignal): Promise<string> {
+  const { persistScreenshot } = await import("../../services");
+  return persistScreenshot(dataUrl, signal);
+}
 
 function statusForError(code: string): number {
   switch (code) {

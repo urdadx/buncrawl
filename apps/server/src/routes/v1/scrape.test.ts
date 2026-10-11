@@ -43,6 +43,39 @@ describe("POST /v1/scrape", () => {
     expect(await response.json()).toMatchObject({ success: true });
   });
 
+  test("persists screenshot bytes before returning success", async () => {
+    let persisted: string | undefined;
+    const screenshot = "data:image/png;base64,iVBORw0KGgo=";
+    const handler = createScrapeHandler(
+      async (request) => ({
+        success: true,
+        data: {
+          screenshot,
+          metadata: {
+            sourceURL: request.url,
+            finalURL: request.url,
+            statusCode: 200,
+            renderer: "webview",
+          },
+        },
+      }),
+      async (dataUrl) => {
+        persisted = dataUrl;
+        return "aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png";
+      },
+    );
+
+    const response = await handler(
+      new Request("http://localhost/v1/scrape", {
+        method: "POST",
+        body: JSON.stringify({ url: "https://example.com", formats: ["screenshots"] }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(persisted).toBe(screenshot);
+  });
+
   test("maps pipeline errors to HTTP status codes", async () => {
     const handler = createScrapeHandler(async () => ({
       success: false,

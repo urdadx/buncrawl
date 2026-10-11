@@ -5,6 +5,7 @@ import { createContext } from "./context";
 import { ENV } from "./env.server";
 import { handleScrape } from "./routes/v1/scrape";
 import { SERVER_IDLE_TIMEOUT_SECONDS } from "./server-config";
+import { servicesReady } from "./services";
 
 const corsHeaders = {
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
@@ -58,51 +59,58 @@ function preflight(request: Request): Response | undefined {
   }
 }
 
-const server = Bun.serve({
-  idleTimeout: SERVER_IDLE_TIMEOUT_SECONDS,
-  routes: {
-    "/": (request) =>
-      handle(request, () => {
-        const response = preflight(request);
-        if (response) return response;
+async function main(): Promise<void> {
+  await servicesReady;
 
-        return request.method === "GET"
-          ? new Response("OK")
-          : new Response("Not Found", { status: 404 });
-      }),
-    "/trpc/*": (request) =>
-      handle(request, () => {
-        const response = preflight(request);
-        if (response) return response;
+  const server = Bun.serve({
+    idleTimeout: SERVER_IDLE_TIMEOUT_SECONDS,
+    routes: {
+      "/": (request) =>
+        handle(request, () => {
+          const response = preflight(request);
+          if (response) return response;
 
-        return fetchRequestHandler({
-          endpoint: "/trpc",
-          req: request,
-          router: appRouter,
-          createContext,
-        });
-      }),
-    "/v1/scrape": (request) =>
-      handle(request, () => {
+          return request.method === "GET"
+            ? new Response("OK")
+            : new Response("Not Found", { status: 404 });
+        }),
+      "/trpc/*": (request) =>
+        handle(request, () => {
+          const response = preflight(request);
+          if (response) return response;
+
+          return fetchRequestHandler({
+            endpoint: "/trpc",
+            req: request,
+            router: appRouter,
+            createContext,
+          });
+        }),
+      "/v1/scrape": (request) =>
+        handle(request, () => {
+          const response = preflight(request);
+          return response ?? handleScrape(request);
+        }),
+    },
+    fetch(request) {
+      return handle(request, () => {
         const response = preflight(request);
-        return response ?? handleScrape(request);
-      }),
-  },
-  fetch(request) {
-    return handle(request, () => {
-      const response = preflight(request);
-      return response ?? new Response("Not Found", { status: 404 });
-    });
-  },
-  error(error) {
-    console.error(error);
-    return new Response("Internal Server Error", {
-      headers: corsHeaders,
-      status: 500,
-    });
-  },
+        return response ?? new Response("Not Found", { status: 404 });
+      });
+    },
+    error(error) {
+      console.error(error);
+      return new Response("Internal Server Error", {
+        headers: corsHeaders,
+        status: 500,
+      });
+    },
+  });
+
+  console.info(`Server listening at ${server.url}`);
+}
+
+main().catch((error) => {
+  console.error("Server startup failed", error);
+  process.exitCode = 1;
 });
-
-console.info(`Server listening at ${server.url}`);
-
-export default server;
