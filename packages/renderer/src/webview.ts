@@ -7,10 +7,11 @@ import {
 import type { RenderRequest, Renderer, RendererCapabilities, RenderResult } from "./renderer";
 
 const DEFAULT_WIDTH = 1280;
-const DEFAULT_HEIGHT = 720;
+const DEFAULT_HEIGHT = 800;
 const DEFAULT_STABILITY_TIMEOUT_MS = 2000;
 const STABILITY_POLL_MS = 100;
 const REQUIRED_STABLE_SAMPLES = 2;
+const MAX_SCREENSHOT_PIXELS = 100_000_000;
 
 type WebViewBackend = "chrome" | "webkit";
 
@@ -170,6 +171,14 @@ export class WebViewRenderer implements Renderer {
             this.networkSafety,
           );
         }
+        if (request.viewport && view.cdp) {
+          await view.cdp("Emulation.setDeviceMetricsOverride", {
+            width: request.viewport.width,
+            height: request.viewport.height,
+            deviceScaleFactor: 1,
+            mobile: false,
+          });
+        }
         await view.navigate(request.url);
         await networkGuard?.settled();
         networkGuard?.throwIfBlocked();
@@ -195,6 +204,7 @@ export class WebViewRenderer implements Renderer {
       );
       await networkGuard?.settled();
       networkGuard?.throwIfBlocked();
+      await waitForVisualAssets(view);
 
       const html = await view.evaluate("document.documentElement.outerHTML");
       await networkGuard?.settled();
@@ -208,7 +218,10 @@ export class WebViewRenderer implements Renderer {
 
       let screenshot: RenderResult["screenshot"];
       if (request.screenshot) {
-        const data = await view.screenshot({ format: "png", encoding: "base64" });
+        const fullPage = typeof request.screenshot === "object" && request.screenshot.fullPage;
+        const data = fullPage
+          ? await captureFullPageScreenshot(view)
+          : await view.screenshot({ format: "png", encoding: "base64" });
         if (typeof data !== "string") {
           throw new WebViewRendererError(
             "WEBVIEW_INVALID_RESULT",
@@ -233,6 +246,84 @@ export class WebViewRenderer implements Renderer {
       view.close();
     }
   }
+}
+
+async function waitForVisualAssets(view: WebViewLike): Promise<void> {
+  await view.evaluate(`(async () => {
+    await Promise.race([
+      Promise.allSettled([
+        document.fonts?.ready,
+        ...Array.from(document.images)
+          .filter((image) => image.complete)
+          .map((image) => image.decode?.().catch(() => undefined)),
+      ]),
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+    ]);
+  })()`);
+}
+
+async function captureFullPageScreenshot(view: WebViewLike): Promise<string> {
+  if (!view.cdp) {
+    throw new WebViewRendererError(
+      "WEBVIEW_UNAVAILABLE",
+      "Full-page screenshots require the Chromium backend",
+    );
+  }
+
+  const metrics = await view.cdp("Page.getLayoutMetrics");
+  const contentSize = readContentSize(metrics);
+  const width = Math.ceil(contentSize.width);
+  const height = Math.ceil(contentSize.height);
+  if (width * height > MAX_SCREENSHOT_PIXELS) {
+    throw new WebViewRendererError(
+      "WEBVIEW_INVALID_RESULT",
+      `Full-page screenshot exceeds ${MAX_SCREENSHOT_PIXELS} pixels`,
+    );
+  }
+
+  const captured = await view.cdp("Page.captureScreenshot", {
+    format: "png",
+    fromSurface: true,
+    captureBeyondViewport: true,
+    clip: { x: 0, y: 0, width, height, scale: 1 },
+  });
+  if (
+    typeof captured !== "object" ||
+    captured === null ||
+    !("data" in captured) ||
+    typeof captured.data !== "string"
+  ) {
+    throw new WebViewRendererError(
+      "WEBVIEW_INVALID_RESULT",
+      "Chromium returned an invalid full-page screenshot",
+    );
+  }
+  return captured.data;
+}
+
+function readContentSize(value: unknown): { width: number; height: number } {
+  if (typeof value !== "object" || value === null || !("contentSize" in value)) {
+    throw new WebViewRendererError("WEBVIEW_INVALID_RESULT", "Chromium returned no layout metrics");
+  }
+  const contentSize = value.contentSize;
+  if (typeof contentSize !== "object" || contentSize === null) {
+    throw new WebViewRendererError("WEBVIEW_INVALID_RESULT", "Chromium returned no content size");
+  }
+  const { width, height } = contentSize as { width?: unknown; height?: unknown };
+  if (
+    typeof width !== "number" ||
+    !Number.isFinite(width) ||
+    width <= 0 ||
+    typeof height !== "number" ||
+    !Number.isFinite(height) ||
+    height <= 0
+  ) {
+    throw new WebViewRendererError(
+      "WEBVIEW_INVALID_RESULT",
+      "Chromium returned invalid content size",
+    );
+  }
+  return { width, height };
 }
 
 async function waitForDomStability(

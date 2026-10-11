@@ -16,10 +16,33 @@ describe("scrapeRequestSchema", () => {
     ).toBe(true);
   });
 
+  test("accepts viewport and full-page screenshot options", () => {
+    const result = v.safeParse(scrapeRequestSchema, {
+      url: "https://example.com",
+      formats: [
+        "markdown",
+        { type: "screenshot", fullPage: true, viewport: { width: 1440, height: 900 } },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   test.each([
     [{ url: "ftp://example.com" }, "URL must use HTTP or HTTPS"],
     [{ url: "https://example.com", formats: [] }, "At least one format is required"],
     [{ url: "https://example.com", formats: ["markdown", "markdown"] }, "Formats must be unique"],
+    [
+      { url: "https://example.com", formats: ["screenshots", { type: "screenshot" }] },
+      "Formats must be unique",
+    ],
+    [
+      {
+        url: "https://example.com",
+        formats: [{ type: "screenshot", viewport: { width: 7681, height: 900 } }],
+      },
+      "Viewport width cannot exceed 7680",
+    ],
     [{ url: "https://example.com", timeout: 120_001 }, "Timeout cannot exceed 120000ms"],
     [{ url: "https://example.com", typo: true }, 'Invalid key: Expected never but received "typo"'],
   ])("rejects invalid input", (input, message) => {

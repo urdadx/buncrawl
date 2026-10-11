@@ -260,7 +260,26 @@ describe("scrape", () => {
       success: true,
       data: { screenshot: "data:image/png;base64,cG5n" },
     });
-    expect(renderer.calls[0]?.screenshot).toBe(true);
+    expect(renderer.calls[0]?.screenshot).toEqual({ fullPage: false });
+  });
+
+  test("forwards viewport and full-page screenshot options", async () => {
+    const renderer = new FakeRenderer({
+      ...renderedPage,
+      screenshot: { data: "cG5n", mimeType: "image/png" },
+    });
+
+    await scrape(
+      {
+        url: "https://example.com",
+        formats: [{ type: "screenshot", fullPage: true, viewport: { width: 1440, height: 900 } }],
+      },
+      {},
+      { fetch: async () => fetched("unused"), renderer },
+    );
+
+    expect(renderer.calls[0]?.screenshot).toEqual({ fullPage: true });
+    expect(renderer.calls[0]?.viewport).toEqual({ width: 1440, height: 900 });
   });
 
   test("does not duplicate an existing screenshot data URL prefix", async () => {

@@ -4,11 +4,15 @@ export interface RenderRequest {
   url: string;
   deadline: Deadline;
   waitForMs?: number;
-  screenshot?: boolean;
+  screenshot?: boolean | ScreenshotOptions;
   viewport?: {
     width: number;
     height: number;
   };
+}
+
+export interface ScreenshotOptions {
+  fullPage?: boolean;
 }
 
 export interface RenderResult {

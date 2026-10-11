@@ -22,7 +22,7 @@ export interface WorkerRenderRequest {
   url: string;
   timeoutMs: number;
   waitForMs?: number;
-  screenshot?: boolean;
+  screenshot?: RenderRequest["screenshot"];
   viewport?: RenderRequest["viewport"];
 }
 

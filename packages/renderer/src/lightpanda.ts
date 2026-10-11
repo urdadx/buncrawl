@@ -78,6 +78,16 @@ export class LightpandaRenderer implements Renderer {
     if (request.deadline.signal.aborted || request.deadline.expired) {
       throw request.deadline.signal.reason ?? new Error("Render deadline expired");
     }
+    if (
+      request.screenshot &&
+      (request.viewport ||
+        (typeof request.screenshot === "object" && request.screenshot.fullPage === true))
+    ) {
+      throw new LightpandaRendererError(
+        "LIGHTPANDA_RENDER_FAILED",
+        "Lightpanda does not support screenshot viewport or full-page options",
+      );
+    }
 
     const startedAt = performance.now();
     const htmlOutput = await this.fetch(request, "html");

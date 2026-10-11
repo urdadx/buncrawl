@@ -1,11 +1,29 @@
 import * as v from "valibot";
 
-export const scrapeFormatSchema = v.picklist([
-  "markdown",
-  "html",
-  "rawHtml",
-  "links",
-  "screenshots",
+const screenshotViewportSchema = v.strictObject({
+  width: v.pipe(
+    v.number(),
+    v.integer("Viewport width must be an integer"),
+    v.minValue(1, "Viewport width must be positive"),
+    v.maxValue(7680, "Viewport width cannot exceed 7680"),
+  ),
+  height: v.pipe(
+    v.number(),
+    v.integer("Viewport height must be an integer"),
+    v.minValue(1, "Viewport height must be positive"),
+    v.maxValue(4320, "Viewport height cannot exceed 4320"),
+  ),
+});
+
+export const screenshotFormatSchema = v.strictObject({
+  type: v.literal("screenshot"),
+  fullPage: v.optional(v.boolean()),
+  viewport: v.optional(screenshotViewportSchema),
+});
+
+export const scrapeFormatSchema = v.union([
+  v.picklist(["markdown", "html", "rawHtml", "links", "screenshots"]),
+  screenshotFormatSchema,
 ]);
 
 export const scrapeRequestSchema = v.strictObject({
@@ -20,7 +38,10 @@ export const scrapeRequestSchema = v.strictObject({
       v.array(scrapeFormatSchema),
       v.minLength(1, "At least one format is required"),
       v.maxLength(5, "Too many formats"),
-      v.check((formats) => new Set(formats).size === formats.length, "Formats must be unique"),
+      v.check(
+        (formats) => new Set(formats.map(formatKey)).size === formats.length,
+        "Formats must be unique",
+      ),
     ),
   ),
   renderJs: v.optional(v.union([v.boolean(), v.literal("auto")])),
@@ -36,7 +57,12 @@ export const scrapeRequestSchema = v.strictObject({
 });
 
 export type ScrapeFormat = v.InferOutput<typeof scrapeFormatSchema>;
+export type ScreenshotFormat = v.InferOutput<typeof screenshotFormatSchema>;
 export type ScrapeRequest = v.InferOutput<typeof scrapeRequestSchema>;
+
+function formatKey(format: v.InferInput<typeof scrapeFormatSchema>): string {
+  return typeof format === "string" ? format : "screenshots";
+}
 
 export interface ScrapeDocument {
   markdown?: string;

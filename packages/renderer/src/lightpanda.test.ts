@@ -4,6 +4,20 @@ import { describe, expect, test } from "bun:test";
 import { LightpandaRenderer, LightpandaRendererError } from "./lightpanda";
 
 describe("LightpandaRenderer", () => {
+  test("rejects screenshot options the CLI cannot honor", async () => {
+    const renderer = new LightpandaRenderer({
+      runner: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+    });
+
+    await expect(
+      renderer.render({
+        url: "https://example.com",
+        deadline: new Deadline(1000),
+        screenshot: { fullPage: true },
+        viewport: { width: 1440, height: 900 },
+      }),
+    ).rejects.toThrow("does not support screenshot viewport or full-page options");
+  });
   test("renders HTML through the Lightpanda CLI", async () => {
     const calls: string[][] = [];
     const renderer = new LightpandaRenderer({

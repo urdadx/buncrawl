@@ -8,6 +8,7 @@ class FakeWebView {
   title = "Rendered title";
   closed = false;
   evaluations = 0;
+  cdpCalls: Array<{ method: string; params?: Record<string, unknown> }> = [];
   private readonly listeners = new Map<string, Set<(event: { data?: unknown }) => void>>();
 
   async navigate(url: string) {
@@ -26,7 +27,13 @@ class FakeWebView {
     return "cG5n";
   }
 
-  async cdp() {}
+  async cdp(method: string, params?: Record<string, unknown>): Promise<unknown> {
+    this.cdpCalls.push({ method, params });
+    if (method === "Page.getLayoutMetrics") {
+      return { contentSize: { width: 1440, height: 3200 } };
+    }
+    if (method === "Page.captureScreenshot") return { data: "ZnVsbC1wYWdl" };
+  }
 
   addEventListener(type: string, listener: (event: { data?: unknown }) => void) {
     const listeners = this.listeners.get(type) ?? new Set();
@@ -83,6 +90,41 @@ describe("WebViewRenderer", () => {
     });
 
     expect(result.screenshot).toEqual({ data: "cG5n", mimeType: "image/png" });
+  });
+
+  test("applies the viewport before navigation and captures the full page through CDP", async () => {
+    const view = new FakeWebView();
+    let receivedOptions: unknown;
+    const renderer = new WebViewRenderer({
+      stabilityTimeoutMs: 0,
+      factory: (options) => {
+        receivedOptions = options;
+        return view;
+      },
+    });
+
+    const result = await renderer.render({
+      url: "https://example.com",
+      deadline: new Deadline(1000),
+      screenshot: { fullPage: true },
+      viewport: { width: 1440, height: 900 },
+    });
+
+    expect(receivedOptions).toMatchObject({ width: 1440, height: 900 });
+    expect(view.cdpCalls).toContainEqual({
+      method: "Emulation.setDeviceMetricsOverride",
+      params: { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false },
+    });
+    expect(view.cdpCalls).toContainEqual({
+      method: "Page.captureScreenshot",
+      params: {
+        format: "png",
+        fromSurface: true,
+        captureBeyondViewport: true,
+        clip: { x: 0, y: 0, width: 1440, height: 3200, scale: 1 },
+      },
+    });
+    expect(result.screenshot).toEqual({ data: "ZnVsbC1wYWdl", mimeType: "image/png" });
   });
 
   test("wraps navigation failures and closes the view", async () => {

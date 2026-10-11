@@ -41,7 +41,10 @@ export async function scrape(
   const deadline = new Deadline(request.timeout ?? DEFAULT_TIMEOUT_MS, context.signal);
   const formats = request.formats ?? DEFAULT_FORMATS;
   const renderMode = request.renderJs ?? "auto";
-  const screenshotRequested = formats.includes("screenshots");
+  const screenshotFormat = formats.find(
+    (format) => format === "screenshots" || typeof format === "object",
+  );
+  const screenshotRequested = screenshotFormat !== undefined;
   const renderer = dependencies.renderer ?? createDefaultRenderer();
   const performFetch = dependencies.fetch ?? fetchPage;
 
@@ -88,7 +91,19 @@ export async function scrape(
           const renderRequest = {
             url: fetched?.finalUrl ?? forcedRenderUrl?.href ?? request.url,
             deadline,
-            screenshot: screenshotRequested,
+            ...(screenshotRequested
+              ? {
+                  screenshot: {
+                    fullPage:
+                      typeof screenshotFormat === "object"
+                        ? (screenshotFormat.fullPage ?? false)
+                        : false,
+                  },
+                }
+              : {}),
+            ...(typeof screenshotFormat === "object" && screenshotFormat.viewport
+              ? { viewport: screenshotFormat.viewport }
+              : {}),
           };
           const accept = (candidate: RenderResult) =>
             (!screenshotRequested || candidate.screenshot !== undefined) &&
@@ -181,14 +196,21 @@ function buildDocument(
     },
   };
 
-  if (formats.includes("markdown")) document.markdown = extracted.markdown;
-  if (formats.includes("html")) document.html = extracted.html;
-  if (formats.includes("rawHtml")) document.rawHtml = rawHtml;
-  if (formats.includes("links")) document.links = extracted.links;
-  if (formats.includes("screenshots") && rendered?.screenshot) {
+  if (hasFormat(formats, "markdown")) document.markdown = extracted.markdown;
+  if (hasFormat(formats, "html")) document.html = extracted.html;
+  if (hasFormat(formats, "rawHtml")) document.rawHtml = rawHtml;
+  if (hasFormat(formats, "links")) document.links = extracted.links;
+  if (
+    formats.some((format) => format === "screenshots" || typeof format === "object") &&
+    rendered?.screenshot
+  ) {
     document.screenshot = screenshotDataUrl(rendered.screenshot);
   }
   return document;
+}
+
+function hasFormat(formats: readonly ScrapeFormat[], expected: ScrapeFormat): boolean {
+  return formats.includes(expected);
 }
 
 function screenshotDataUrl(screenshot: NonNullable<RenderResult["screenshot"]>): string {
