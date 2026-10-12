@@ -284,7 +284,9 @@ class BunRendererWorker implements RendererWorker {
       {
         ipc: (message) => this.onMessage(message),
         env: { ...process.env, BUNCRAWL_RENDERER_CONFIG: JSON.stringify(config) },
-        stdout: "ignore",
+        // Renderer phase timings are emitted by the worker and must remain
+        // visible to diagnose navigation, settling, and screenshot latency.
+        stdout: "inherit",
         stderr: "inherit",
       },
     );

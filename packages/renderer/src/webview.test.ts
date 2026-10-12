@@ -8,7 +8,9 @@ class FakeWebView {
   title = "Rendered title";
   closed = false;
   evaluations = 0;
+  evaluatedScripts: string[] = [];
   cdpCalls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+  scrollY = 0;
   private readonly listeners = new Map<string, Set<(event: { data?: unknown }) => void>>();
 
   async navigate(url: string) {
@@ -17,8 +19,16 @@ class FakeWebView {
 
   async evaluate(script: string): Promise<unknown> {
     this.evaluations += 1;
+    this.evaluatedScripts.push(script);
     if (script.includes("htmlLength")) {
       return { readyState: "complete", htmlLength: 42 };
+    }
+    if (script.includes("document.scrollingElement")) {
+      return { scrollY: this.scrollY, scrollHeight: 3200, innerHeight: 900 };
+    }
+    if (script.includes("window.scrollTo")) {
+      this.scrollY = Number(script.match(/top: ([0-9]+)/)?.[1] ?? this.scrollY);
+      return;
     }
     return "<html><body>Rendered</body></html>";
   }
@@ -124,6 +134,8 @@ describe("WebViewRenderer", () => {
         clip: { x: 0, y: 0, width: 1440, height: 3200, scale: 1 },
       },
     });
+    expect(view.evaluatedScripts.some((script) => /top: [1-9][0-9]*/.test(script))).toBe(true);
+    expect(view.scrollY).toBe(0);
     expect(result.screenshot).toEqual({ data: "ZnVsbC1wYWdl", mimeType: "image/png" });
   });
 

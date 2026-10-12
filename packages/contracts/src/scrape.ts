@@ -46,6 +46,14 @@ export const scrapeRequestSchema = v.strictObject({
   ),
   renderJs: v.optional(v.union([v.boolean(), v.literal("auto")])),
   onlyMainContent: v.optional(v.boolean()),
+  waitForMs: v.optional(
+    v.pipe(
+      v.number(),
+      v.integer("waitForMs must be an integer"),
+      v.minValue(0, "waitForMs cannot be negative"),
+      v.maxValue(30_000, "waitForMs cannot exceed 30000ms"),
+    ),
+  ),
   timeout: v.optional(
     v.pipe(
       v.number(),

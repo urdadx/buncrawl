@@ -45,6 +45,7 @@ export async function scrape(
     (format) => format === "screenshots" || typeof format === "object",
   );
   const screenshotRequested = screenshotFormat !== undefined;
+  const screenshotOnly = screenshotRequested && formats.every(isScreenshotFormat);
   const renderer = dependencies.renderer ?? createDefaultRenderer();
   const performFetch = dependencies.fetch ?? fetchPage;
 
@@ -54,14 +55,14 @@ export async function scrape(
 
   try {
     const forcedRenderUrl =
-      renderMode === true
+      renderMode === true || screenshotOnly
         ? await validateResolvedUrl(request.url, {
             resolver: context.resolver,
             signal: deadline.signal,
           })
         : undefined;
     let fetched: FetchPageResult | undefined;
-    if (renderMode !== true) {
+    if (renderMode !== true && !screenshotOnly) {
       fetched = await performFetch(request.url, {
         deadline,
         resolver: context.resolver,
@@ -91,6 +92,7 @@ export async function scrape(
           const renderRequest = {
             url: fetched?.finalUrl ?? forcedRenderUrl?.href ?? request.url,
             deadline,
+            ...(request.waitForMs === undefined ? {} : { waitForMs: request.waitForMs }),
             ...(screenshotRequested
               ? {
                   screenshot: {
@@ -106,8 +108,9 @@ export async function scrape(
               : {}),
           };
           const accept = (candidate: RenderResult) =>
-            (!screenshotRequested || candidate.screenshot !== undefined) &&
-            isRenderedContentBetter(candidate, fetched, fetchedDecision);
+            screenshotRequested
+              ? candidate.screenshot !== undefined && candidate.html.trim().length > 0
+              : isRenderedContentBetter(candidate, fetched, fetchedDecision);
           const candidate = isFallbackRenderer(renderer)
             ? await renderer.renderWithFallback(renderRequest, accept)
             : await renderer.render(renderRequest);
@@ -211,6 +214,10 @@ function buildDocument(
 
 function hasFormat(formats: readonly ScrapeFormat[], expected: ScrapeFormat): boolean {
   return formats.includes(expected);
+}
+
+function isScreenshotFormat(format: ScrapeFormat): boolean {
+  return format === "screenshots" || typeof format === "object";
 }
 
 function screenshotDataUrl(screenshot: NonNullable<RenderResult["screenshot"]>): string {

@@ -11,7 +11,12 @@ const DEFAULT_HEIGHT = 800;
 const DEFAULT_STABILITY_TIMEOUT_MS = 2000;
 const STABILITY_POLL_MS = 100;
 const REQUIRED_STABLE_SAMPLES = 2;
+const MEANINGFUL_TEXT_LENGTH = 20;
 const MAX_SCREENSHOT_PIXELS = 100_000_000;
+const MAX_LAZY_LOAD_MS = 2500;
+const MAX_LAZY_SCROLL_STEPS = 80;
+const LAZY_SCROLL_PAUSE_MS = 50;
+const MAX_ASSET_WAIT_MS = 1000;
 
 type WebViewBackend = "chrome" | "webkit";
 
@@ -131,7 +136,9 @@ export class WebViewRenderer implements Renderer {
     }
 
     const startedAt = performance.now();
+    const timings: Record<string, number> = {};
     let view: WebViewLike;
+    const createStartedAt = performance.now();
     try {
       view = this.factory({
         width: request.viewport?.width ?? DEFAULT_WIDTH,
@@ -139,6 +146,7 @@ export class WebViewRenderer implements Renderer {
         ...(this.launchBackend ? { backend: this.launchBackend } : {}),
         dataStore: "ephemeral",
       });
+      timings.createViewMs = performance.now() - createStartedAt;
     } catch (cause) {
       throw new WebViewRendererError("WEBVIEW_UNAVAILABLE", "Bun.WebView is unavailable", {
         cause,
@@ -152,6 +160,7 @@ export class WebViewRenderer implements Renderer {
     let networkGuard: BrowserNetworkGuard | undefined;
 
     try {
+      const navigationStartedAt = performance.now();
       try {
         if (this.networkSafety !== false) {
           if (!view.cdp || !view.addEventListener || !view.removeEventListener) {
@@ -182,6 +191,7 @@ export class WebViewRenderer implements Renderer {
         await view.navigate(request.url);
         await networkGuard?.settled();
         networkGuard?.throwIfBlocked();
+        timings.navigationMs = performance.now() - navigationStartedAt;
       } catch (cause) {
         if (request.deadline.signal.aborted) {
           throw request.deadline.signal.reason ?? cause;
@@ -195,17 +205,39 @@ export class WebViewRenderer implements Renderer {
       }
 
       if (request.waitForMs && request.waitForMs > 0) {
+        const waitStartedAt = performance.now();
         await sleepWithinDeadline(request.waitForMs, request.deadline.signal);
+        timings.explicitWaitMs = performance.now() - waitStartedAt;
       }
-      await waitForDomStability(
+      const settleStartedAt = performance.now();
+      const readiness = await waitForDomReadiness(
         view,
         Math.min(this.stabilityTimeoutMs, request.deadline.remainingMs),
         request.deadline.signal,
       );
       await networkGuard?.settled();
       networkGuard?.throwIfBlocked();
-      await waitForVisualAssets(view);
+      timings.initialSettleMs = performance.now() - settleStartedAt;
+      timings.meaningfulContent = readiness.meaningful ? 1 : 0;
 
+      const fullPage = typeof request.screenshot === "object" && request.screenshot.fullPage;
+      if (fullPage) {
+        const lazyLoadStartedAt = performance.now();
+        await activateLazyContent(
+          view,
+          request.viewport?.height ?? DEFAULT_HEIGHT,
+          Math.min(MAX_LAZY_LOAD_MS, request.deadline.remainingMs),
+          request.deadline.signal,
+        );
+        timings.lazyLoadMs = performance.now() - lazyLoadStartedAt;
+      }
+      if (request.screenshot) {
+        const assetWaitStartedAt = performance.now();
+        await waitForVisualAssets(view, Math.min(MAX_ASSET_WAIT_MS, request.deadline.remainingMs));
+        timings.assetWaitMs = performance.now() - assetWaitStartedAt;
+      }
+
+      const htmlStartedAt = performance.now();
       const html = await view.evaluate("document.documentElement.outerHTML");
       await networkGuard?.settled();
       networkGuard?.throwIfBlocked();
@@ -215,10 +247,11 @@ export class WebViewRenderer implements Renderer {
           "WebView returned a non-string document",
         );
       }
+      timings.htmlMs = performance.now() - htmlStartedAt;
 
       let screenshot: RenderResult["screenshot"];
       if (request.screenshot) {
-        const fullPage = typeof request.screenshot === "object" && request.screenshot.fullPage;
+        const screenshotStartedAt = performance.now();
         const data = fullPage
           ? await captureFullPageScreenshot(view)
           : await view.screenshot({ format: "png", encoding: "base64" });
@@ -229,7 +262,11 @@ export class WebViewRenderer implements Renderer {
           );
         }
         screenshot = { data, mimeType: "image/png" };
+        timings.screenshotMs = performance.now() - screenshotStartedAt;
       }
+
+      timings.totalMs = performance.now() - startedAt;
+      console.info(JSON.stringify({ event: "webview_render", timings }));
 
       return {
         sourceUrl: request.url,
@@ -248,18 +285,91 @@ export class WebViewRenderer implements Renderer {
   }
 }
 
-async function waitForVisualAssets(view: WebViewLike): Promise<void> {
+async function waitForVisualAssets(view: WebViewLike, timeoutMs: number): Promise<void> {
+  if (timeoutMs <= 0) return;
   await view.evaluate(`(async () => {
+    const waitForImage = async (image) => {
+      if (!image.complete) {
+        await new Promise((resolve) => {
+          image.addEventListener("load", resolve, { once: true });
+          image.addEventListener("error", resolve, { once: true });
+        });
+      }
+      if (image.naturalWidth > 0 && image.decode) await image.decode().catch(() => undefined);
+    };
     await Promise.race([
       Promise.allSettled([
         document.fonts?.ready,
-        ...Array.from(document.images)
-          .filter((image) => image.complete)
-          .map((image) => image.decode?.().catch(() => undefined)),
+        ...Array.from(document.images).map(waitForImage),
       ]),
-      new Promise((resolve) => setTimeout(resolve, 1500)),
+      new Promise((resolve) => setTimeout(resolve, ${Math.floor(timeoutMs)})),
     ]);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   })()`);
+}
+
+async function activateLazyContent(
+  view: WebViewLike,
+  viewportHeight: number,
+  budgetMs: number,
+  signal: AbortSignal,
+): Promise<void> {
+  if (budgetMs <= 0) return;
+  const expiresAt = performance.now() + budgetMs;
+  const original = await readScrollState(view);
+  if (!original) return;
+
+  let state = original;
+  let stableBottomSamples = 0;
+  for (let step = 0; step < MAX_LAZY_SCROLL_STEPS && performance.now() < expiresAt; step++) {
+    throwIfAborted(signal);
+    const nextY = Math.min(
+      Math.max(0, state.scrollHeight - viewportHeight),
+      state.scrollY + Math.max(1, Math.floor(viewportHeight * 0.8)),
+    );
+    await view.evaluate(`window.scrollTo({ top: ${nextY}, behavior: "instant" })`);
+    await sleepWithinDeadline(
+      Math.min(LAZY_SCROLL_PAUSE_MS, Math.max(1, expiresAt - performance.now())),
+      signal,
+    );
+    const next = await readScrollState(view);
+    if (!next) break;
+
+    const atBottom = next.scrollY + next.innerHeight >= next.scrollHeight - 1;
+    stableBottomSamples =
+      atBottom && next.scrollHeight === state.scrollHeight ? stableBottomSamples + 1 : 0;
+    state = next;
+    if (stableBottomSamples >= 2) break;
+  }
+
+  await view.evaluate(`window.scrollTo({ top: ${original.scrollY}, behavior: "instant" })`);
+}
+
+async function readScrollState(view: WebViewLike): Promise<ScrollState | undefined> {
+  const value = await view.evaluate(`(() => {
+    const root = document.scrollingElement || document.documentElement;
+    return {
+      scrollY: root.scrollTop,
+      scrollHeight: root.scrollHeight,
+      innerHeight: window.innerHeight,
+    };
+  })()`);
+  if (typeof value !== "object" || value === null) return;
+  const state = value as Partial<ScrollState>;
+  if (
+    typeof state.scrollY !== "number" ||
+    typeof state.scrollHeight !== "number" ||
+    typeof state.innerHeight !== "number"
+  ) {
+    return;
+  }
+  return state as ScrollState;
+}
+
+interface ScrollState {
+  scrollY: number;
+  scrollHeight: number;
+  innerHeight: number;
 }
 
 async function captureFullPageScreenshot(view: WebViewLike): Promise<string> {
@@ -326,41 +436,74 @@ function readContentSize(value: unknown): { width: number; height: number } {
   return { width, height };
 }
 
-async function waitForDomStability(
+async function waitForDomReadiness(
   view: WebViewLike,
   timeoutMs: number,
   signal: AbortSignal,
-): Promise<void> {
+): Promise<{ meaningful: boolean }> {
   const expiresAt = performance.now() + Math.max(0, timeoutMs);
-  let previousLength = -1;
-  // what is stableSamples? It is a counter that tracks how many consecutive samples of the DOM's outerHTML length have remained the same, indicating that the DOM has stabilized and is no longer changing significantly.
+  let previousSignature = "";
   let stableSamples = 0;
-
-  // what is performance.now()? It is a high-resolution timer that provides the current time in milliseconds since the page was loaded. It is used here to measure elapsed time and determine if the DOM has stabilized within the specified timeout.
+  let meaningful = false;
 
   while (performance.now() < expiresAt) {
     throwIfAborted(signal);
     const state = await view.evaluate(
-      "({ readyState: document.readyState, htmlLength: document.documentElement.outerHTML.length })",
+      `(() => {
+        const body = document.body;
+        const textLength = (body?.innerText || "").trim().length;
+        const visualCount = body
+          ? body.querySelectorAll("img, picture, video, canvas, iframe").length
+          : 0;
+        const appRootChildren = Array.from(
+          document.querySelectorAll("#root, #app, #__next, #__nuxt, [data-reactroot]")
+        ).reduce((count, root) => count + root.childElementCount, 0);
+        return {
+          readyState: document.readyState,
+          htmlLength: document.documentElement.outerHTML.length,
+          textLength,
+          visualCount,
+          appRootChildren,
+        };
+      })()`,
     );
-    if (!isDomState(state)) return;
+    if (!isDomState(state)) return { meaningful: true };
 
-    if (state.readyState === "complete" && state.htmlLength === previousLength) {
+    meaningful =
+      state.textLength === undefined ||
+      state.textLength >= MEANINGFUL_TEXT_LENGTH ||
+      (state.visualCount ?? 0) > 0;
+    const signature = `${state.htmlLength}:${state.textLength ?? "?"}:${state.visualCount ?? "?"}:${state.appRootChildren ?? "?"}`;
+
+    if (meaningful && state.readyState === "complete" && signature === previousSignature) {
       stableSamples += 1;
-      if (stableSamples >= REQUIRED_STABLE_SAMPLES) return;
+      if (stableSamples >= REQUIRED_STABLE_SAMPLES) return { meaningful: true };
     } else {
       stableSamples = 0;
     }
-    previousLength = state.htmlLength;
+    previousSignature = signature;
     await sleepWithinDeadline(STABILITY_POLL_MS, signal);
   }
+  return { meaningful };
 }
 
 // how do we detect a DOM state? We detect a DOM state by evaluating a script in the WebView that returns an object containing the document's readyState and the length of the outerHTML of the document's root element. This allows us to monitor changes in the DOM and determine if it has stabilized.
-function isDomState(value: unknown): value is { readyState: string; htmlLength: number } {
+function isDomState(value: unknown): value is {
+  readyState: string;
+  htmlLength: number;
+  textLength?: number;
+  visualCount?: number;
+  appRootChildren?: number;
+} {
   if (typeof value !== "object" || value === null) return false;
   const state = value as Record<string, unknown>;
-  return typeof state.readyState === "string" && typeof state.htmlLength === "number";
+  return (
+    typeof state.readyState === "string" &&
+    typeof state.htmlLength === "number" &&
+    (state.textLength === undefined || typeof state.textLength === "number") &&
+    (state.visualCount === undefined || typeof state.visualCount === "number") &&
+    (state.appRootChildren === undefined || typeof state.appRootChildren === "number")
+  );
 }
 
 // sleeps for the specified number of milliseconds, but respects the abort signal.

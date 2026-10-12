@@ -13,6 +13,7 @@ export interface CdpView {
 export interface BrowserNetworkSafetyOptions {
   resolver?: DnsResolver;
   dnsTimeoutMs?: number;
+  maxConcurrentValidations?: number;
 }
 
 interface PausedRequest {
@@ -33,8 +34,9 @@ export async function installBrowserNetworkGuard(
   options: BrowserNetworkSafetyOptions = {},
 ): Promise<BrowserNetworkGuard> {
   let blocked: unknown;
-  let work = Promise.resolve();
+  const pending = new Set<Promise<void>>();
   let commands = Promise.resolve<unknown>(undefined);
+  const validate = createConcurrencyLimiter(options.maxConcurrentValidations ?? 8);
 
   // command queues up a CDP command to be sent to the browser view. It ensures that commands are sent in order and that any errors are caught and ignored, so that subsequent commands can still be sent. It returns a promise that resolves with the result of the command.
   const command = (method: string, params?: Record<string, unknown>) => {
@@ -47,7 +49,7 @@ export async function installBrowserNetworkGuard(
   const listener = (event: CdpEvent) => {
     const paused = parsePausedRequest(event.data);
     if (!paused) return;
-    work = work.then(async () => {
+    const work = validate(async () => {
       try {
         if (signal.aborted) throw signal.reason ?? new Error("Render aborted");
         if (isLocalDocumentUrl(paused.request.url)) {
@@ -68,6 +70,8 @@ export async function installBrowserNetworkGuard(
         }).catch(() => undefined);
       }
     });
+    pending.add(work);
+    void work.finally(() => pending.delete(work));
   };
 
   view.addEventListener("Fetch.requestPaused", listener);
@@ -86,7 +90,7 @@ export async function installBrowserNetworkGuard(
 
   return {
     async settled() {
-      await work;
+      while (pending.size > 0) await Promise.all([...pending]);
       await commands;
     },
     throwIfBlocked() {
@@ -95,6 +99,25 @@ export async function installBrowserNetworkGuard(
     close() {
       view.removeEventListener("Fetch.requestPaused", listener);
     },
+  };
+}
+
+function createConcurrencyLimiter(limit: number) {
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new TypeError("maxConcurrentValidations must be a positive integer");
+  }
+
+  let active = 0;
+  const waiting: Array<() => void> = [];
+  return async function run(task: () => Promise<void>): Promise<void> {
+    if (active >= limit) await new Promise<void>((resolve) => waiting.push(resolve));
+    active += 1;
+    try {
+      await task();
+    } finally {
+      active -= 1;
+      waiting.shift()?.();
+    }
   };
 }
 

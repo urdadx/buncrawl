@@ -41,10 +41,15 @@ export function createScrapeHandler(
       );
     }
 
+    const scrapeStartedAt = performance.now();
     const response = await scrapePage(parsed.output, { signal: request.signal });
+    const scrapeMs = performance.now() - scrapeStartedAt;
+    let artifactMs = 0;
     if (response.success && response.data.screenshot) {
       try {
+        const artifactStartedAt = performance.now();
         await persist(response.data.screenshot, request.signal);
+        artifactMs = performance.now() - artifactStartedAt;
       } catch (error) {
         return json(
           {
@@ -56,6 +61,14 @@ export function createScrapeHandler(
         );
       }
     }
+    console.info(
+      JSON.stringify({
+        event: "scrape_request",
+        scrapeMs,
+        artifactMs,
+        screenshot: Boolean(response.success && response.data.screenshot),
+      }),
+    );
     return json(response, response.success ? 200 : statusForError(response.code));
   };
 }

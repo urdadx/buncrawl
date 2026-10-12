@@ -263,6 +263,29 @@ describe("scrape", () => {
     expect(renderer.calls[0]?.screenshot).toEqual({ fullPage: false });
   });
 
+  test("skips native fetch for screenshot-only requests", async () => {
+    const renderer = new FakeRenderer({
+      ...renderedPage,
+      screenshot: { data: "cG5n", mimeType: "image/png" },
+    });
+    let fetchedPage = false;
+
+    const response = await scrape(
+      { url: "https://example.com", formats: ["screenshots"] },
+      { resolver: async () => ["93.184.216.34"] },
+      {
+        fetch: async () => {
+          fetchedPage = true;
+          return fetched("unused");
+        },
+        renderer,
+      },
+    );
+
+    expect(response.success).toBe(true);
+    expect(fetchedPage).toBe(false);
+  });
+
   test("forwards viewport and full-page screenshot options", async () => {
     const renderer = new FakeRenderer({
       ...renderedPage,
