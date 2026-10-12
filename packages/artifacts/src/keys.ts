@@ -1,5 +1,4 @@
 const ARTIFACT_KEY = /^[0-9a-f]{32}\.[a-z0-9]{1,10}$/;
-const LEGACY_ARTIFACT_KEY = /^[0-9a-f]{2}\/[0-9a-f]{32}\.[a-z0-9]{1,10}$/;
 const EXTENSION = /^[a-z0-9]{1,10}$/;
 
 export function createArtifactKey(extension: string): string {
@@ -11,13 +10,6 @@ export function createArtifactKey(extension: string): string {
 }
 
 export function validateArtifactKey(key: string): string {
-  if (!ARTIFACT_KEY.test(key) && !LEGACY_ARTIFACT_KEY.test(key)) {
-    throw new TypeError("Invalid artifact key");
-  }
-  return key;
-}
-
-export function validateNewArtifactKey(key: string): string {
   if (!ARTIFACT_KEY.test(key)) throw new TypeError("Invalid artifact key");
   return key;
 }

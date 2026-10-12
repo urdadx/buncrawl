@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import * as v from "valibot";
 
-import { scrapeRequestSchema } from "./scrape";
+import { scrapeRequestSchema } from "../src/scrape";
 
 describe("scrapeRequestSchema", () => {
   test("accepts a valid request", () => {

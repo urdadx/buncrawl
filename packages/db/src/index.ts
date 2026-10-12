@@ -28,5 +28,6 @@ export type Database = ReturnType<typeof createDb>;
 
 export * from "./artifacts";
 export * from "./config";
+export * from "./jobs";
 export * from "./migrate";
 export * from "./schema";

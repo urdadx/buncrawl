@@ -346,6 +346,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@buncrawl/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@libsql/client':
         specifier: 0.18.0
         version: 0.18.0

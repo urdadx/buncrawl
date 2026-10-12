@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 
-import { validateArtifactKey, validateNewArtifactKey } from "./keys";
+import { validateArtifactKey } from "./keys";
 import { ArtifactStoreError, checksum, type ArtifactStore, type ArtifactWrite } from "./store";
 
 export class FilesystemArtifactStore implements ArtifactStore {
@@ -18,7 +18,7 @@ export class FilesystemArtifactStore implements ArtifactStore {
 
   async put(input: ArtifactWrite) {
     input.signal?.throwIfAborted();
-    const path = this.#path(validateNewArtifactKey(input.key));
+    const path = this.#path(input.key);
     try {
       await writeFile(path, input.data, { signal: input.signal });
       return {

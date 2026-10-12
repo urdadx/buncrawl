@@ -72,22 +72,23 @@ function formatKey(format: v.InferInput<typeof scrapeFormatSchema>): string {
   return typeof format === "string" ? format : "screenshots";
 }
 
-export interface ScrapeDocument {
-  markdown?: string;
-  html?: string;
-  rawHtml?: string;
-  links?: string[];
-  /** PNG data URL (`data:image/png;base64,...`). */
-  screenshot?: string;
-  metadata: {
-    sourceURL: string;
-    finalURL: string;
-    title?: string;
-    statusCode: number;
-    contentType?: string;
-    renderer: string;
-  };
-}
+export const scrapeDocumentSchema = v.strictObject({
+  markdown: v.optional(v.string()),
+  html: v.optional(v.string()),
+  rawHtml: v.optional(v.string()),
+  links: v.optional(v.array(v.string())),
+  screenshot: v.optional(v.string()),
+  metadata: v.strictObject({
+    sourceURL: v.string(),
+    finalURL: v.string(),
+    title: v.optional(v.string()),
+    statusCode: v.pipe(v.number(), v.integer()),
+    contentType: v.optional(v.string()),
+    renderer: v.string(),
+  }),
+});
+
+export type ScrapeDocument = v.InferOutput<typeof scrapeDocumentSchema>;
 
 export type ScrapeResponse =
   | { success: true; data: ScrapeDocument; warning?: string }

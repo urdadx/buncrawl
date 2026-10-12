@@ -18,6 +18,7 @@ buncrawl/
 │   ├── contracts/
 │   │   └── src/
 │   │       ├── index.ts
+│   │       ├── jobs.ts                   # Canonical async job contracts
 │   │       └── scrape.ts                 # Public scrape request/response types
 │   │
 │   ├── core/
@@ -290,7 +291,7 @@ Build this work in dependency order. The first vertical slice is a durable `/v1/
 - Do not treat a repeated URL as a cache key. Any scrape-result cache must be opt-in and key the normalized URL plus every output-affecting request option, with an explicit freshness policy.
 - Keep artifact persistence outside the browser concurrency slot so slow filesystem or R2 writes do not reduce render throughput.
 
-#### 12.2 Canonical Job Contracts
+#### 12.2 Canonical Job Contracts -> DONE
 
 - Add strict Valibot schemas for job submission, status, progress, results, cancellation, and errors.
 - Define job types: `batch_scrape`, `map`, and `crawl` initially.
@@ -299,7 +300,7 @@ Build this work in dependency order. The first vertical slice is a durable `/v1/
 - Assign stable job and item IDs, timestamps, counters, limits, and ordered event sequence numbers.
 - Keep contracts Buncrawl-native; Firecrawl request and response translation remains a boundary adapter.
 
-#### 12.3 Drizzle Job Schema and Repository
+#### 12.3 Drizzle Job Schema and Repository -> DONE
 
 - Add migrations and tables for `jobs`, `job_items`, `job_events`, and `artifacts`.
 - Include request JSON, result/error metadata, progress counters, cancellation state, attempts, and timestamps.

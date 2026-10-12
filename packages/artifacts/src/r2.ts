@@ -1,4 +1,4 @@
-import { validateArtifactKey, validateNewArtifactKey } from "./keys";
+import { validateArtifactKey } from "./keys";
 import { ArtifactStoreError, checksum, type ArtifactStore, type ArtifactWrite } from "./store";
 
 export interface R2ArtifactStoreOptions {
@@ -41,7 +41,7 @@ export class R2ArtifactStore implements ArtifactStore {
   }
 
   async put(input: ArtifactWrite) {
-    validateNewArtifactKey(input.key);
+    validateArtifactKey(input.key);
     await this.#retry("upload", input.signal, () =>
       this.#client.file(input.key).write(input.data, { type: input.contentType }),
     );
@@ -88,5 +88,5 @@ export class R2ArtifactStore implements ArtifactStore {
 
 function createProbeKey(): string {
   const id = crypto.randomUUID().replaceAll("-", "");
-  return `${id.slice(0, 2)}/${id}.probe`;
+  return `${id}.probe`;
 }

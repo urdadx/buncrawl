@@ -15,15 +15,15 @@ describe("artifact keys", () => {
     expect(validateArtifactKey(createArtifactKey("PNG"))).toMatch(/^[0-9a-f]{32}\.png$/);
   });
 
-  test("accepts legacy sharded keys for existing artifacts", () => {
-    expect(validateArtifactKey("aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png")).toBe(
-      "aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png",
-    );
-  });
-
-  test.each(["../secret", "/absolute", "aa/../../secret.png", "aa/file name.png", "request.png"])(
-    "rejects unsafe key %s",
-    (key) => expect(() => validateArtifactKey(key)).toThrow("Invalid artifact key"),
+  test.each([
+    "../secret",
+    "/absolute",
+    "aa/../../secret.png",
+    "aa/file name.png",
+    "aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png",
+    "request.png",
+  ])("rejects unsafe key %s", (key) =>
+    expect(() => validateArtifactKey(key)).toThrow("Invalid artifact key"),
   );
 });
 

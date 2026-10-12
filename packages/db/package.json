@@ -16,6 +16,7 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
+    "@buncrawl/contracts": "workspace:*",
     "@libsql/client": "0.18.0",
     "drizzle-orm": "1.0.0-rc.4",
     "valibot": "catalog:"
