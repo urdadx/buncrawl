@@ -12,8 +12,12 @@ afterEach(async () =>
 
 describe("artifact keys", () => {
   test("creates opaque normalized keys", () => {
-    expect(validateArtifactKey(createArtifactKey("PNG"))).toMatch(
-      /^[0-9a-f]{2}\/[0-9a-f]{32}\.png$/,
+    expect(validateArtifactKey(createArtifactKey("PNG"))).toMatch(/^[0-9a-f]{32}\.png$/);
+  });
+
+  test("accepts legacy sharded keys for existing artifacts", () => {
+    expect(validateArtifactKey("aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png")).toBe(
+      "aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png",
     );
   });
 

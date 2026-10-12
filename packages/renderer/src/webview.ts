@@ -17,6 +17,7 @@ const MAX_LAZY_LOAD_MS = 2500;
 const MAX_LAZY_SCROLL_STEPS = 80;
 const LAZY_SCROLL_PAUSE_MS = 50;
 const MAX_ASSET_WAIT_MS = 1000;
+const MAX_NAVIGATION_WAIT_MS = 10_000;
 
 type WebViewBackend = "chrome" | "webkit";
 
@@ -179,6 +180,9 @@ export class WebViewRenderer implements Renderer {
             request.deadline.signal,
             this.networkSafety,
           );
+        } else if (this.usesCdpNavigation()) {
+          // Bun creates the CDP session on the first WebView navigation.
+          await view.navigate("about:blank");
         }
         if (request.viewport && view.cdp) {
           await view.cdp("Emulation.setDeviceMetricsOverride", {
@@ -188,8 +192,18 @@ export class WebViewRenderer implements Renderer {
             mobile: false,
           });
         }
-        await view.navigate(request.url);
-        await networkGuard?.settled();
+        if (this.usesCdpNavigation() && this.networkSafety === false && view.cdp) {
+          const navigation = await view.cdp("Page.navigate", { url: request.url });
+          const errorText = readNavigationError(navigation);
+          if (errorText) throw new Error(errorText);
+        } else {
+          await waitForNavigation(
+            view.navigate(request.url),
+            Math.min(MAX_NAVIGATION_WAIT_MS, request.deadline.remainingMs),
+            request.deadline.signal,
+          );
+        }
+        await networkGuard?.settled(2000);
         networkGuard?.throwIfBlocked();
         timings.navigationMs = performance.now() - navigationStartedAt;
       } catch (cause) {
@@ -215,7 +229,7 @@ export class WebViewRenderer implements Renderer {
         Math.min(this.stabilityTimeoutMs, request.deadline.remainingMs),
         request.deadline.signal,
       );
-      await networkGuard?.settled();
+      await networkGuard?.settled(250);
       networkGuard?.throwIfBlocked();
       timings.initialSettleMs = performance.now() - settleStartedAt;
       timings.meaningfulContent = readiness.meaningful ? 1 : 0;
@@ -239,7 +253,7 @@ export class WebViewRenderer implements Renderer {
 
       const htmlStartedAt = performance.now();
       const html = await view.evaluate("document.documentElement.outerHTML");
-      await networkGuard?.settled();
+      await networkGuard?.settled(250);
       networkGuard?.throwIfBlocked();
       if (typeof html !== "string") {
         throw new WebViewRendererError(
@@ -282,6 +296,47 @@ export class WebViewRenderer implements Renderer {
       request.deadline.signal.removeEventListener("abort", abort);
       view.close();
     }
+  }
+
+  private usesCdpNavigation(): boolean {
+    if (this.customFactory) return false;
+    return (
+      this.backend === "chrome" || (this.backend === undefined && process.platform !== "darwin")
+    );
+  }
+}
+
+function readNavigationError(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null || !("errorText" in value)) return;
+  return typeof value.errorText === "string" && value.errorText ? value.errorText : undefined;
+}
+
+async function waitForNavigation(
+  navigation: Promise<void>,
+  maxWaitMs: number,
+  signal: AbortSignal,
+): Promise<void> {
+  if (maxWaitMs <= 0) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let rejectTimeout: ((reason?: unknown) => void) | undefined;
+  const abort = () => {
+    if (timer) clearTimeout(timer);
+    rejectTimeout?.(signal.reason ?? new Error("Render aborted"));
+  };
+  const timeout = new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason ?? new Error("Render aborted"));
+      return;
+    }
+    rejectTimeout = reject;
+    timer = setTimeout(resolve, maxWaitMs);
+    signal.addEventListener("abort", abort, { once: true });
+  });
+  try {
+    await Promise.race([navigation, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+    signal.removeEventListener("abort", abort);
   }
 }
 

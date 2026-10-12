@@ -22,7 +22,7 @@ interface PausedRequest {
 }
 
 export interface BrowserNetworkGuard {
-  settled(): Promise<void>;
+  settled(maxWaitMs?: number): Promise<void>;
   throwIfBlocked(): void;
   close(): void;
 }
@@ -89,9 +89,12 @@ export async function installBrowserNetworkGuard(
   }
 
   return {
-    async settled() {
-      while (pending.size > 0) await Promise.all([...pending]);
-      await commands;
+    async settled(maxWaitMs = 1000) {
+      const expiresAt = performance.now() + Math.max(0, maxWaitMs);
+      while (pending.size > 0 && performance.now() < expiresAt) {
+        await waitUpTo(Promise.all([...pending]), expiresAt - performance.now());
+      }
+      await waitUpTo(commands, expiresAt - performance.now());
     },
     throwIfBlocked() {
       if (blocked) throw blocked;
@@ -100,6 +103,21 @@ export async function installBrowserNetworkGuard(
       view.removeEventListener("Fetch.requestPaused", listener);
     },
   };
+}
+
+async function waitUpTo(work: Promise<unknown>, timeoutMs: number): Promise<void> {
+  if (timeoutMs <= 0) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      work,
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function createConcurrencyLimiter(limit: number) {
