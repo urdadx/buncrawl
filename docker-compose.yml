@@ -43,7 +43,11 @@ services:
     environment:
       CORS_ORIGIN: http://localhost:3001
       DATABASE_URL: file:/data/buncrawl.db
+      REDIS_URL: redis://redis:6379
       BUNCRAWL_ARTIFACTS_PATH: /data/artifacts
+    depends_on:
+      redis:
+        condition: service_started
     healthcheck:
       test:
         [
@@ -63,6 +67,16 @@ services:
         bind:
           create_host_path: false
     restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+volumes:
+  redis-data:
 
 # BuildKit makes these available only while install/build commands run.
 secrets:

@@ -310,7 +310,7 @@ Build this work in dependency order. The first vertical slice is a durable `/v1/
 - Make completion idempotent and reject stale workers using the lease version.
 - Do not tie an accepted job to the submitting HTTP request's abort signal.
 
-#### 12.4 Local Worker and Redis Dispatch
+#### 12.4 Local Worker and Redis Dispatch -> DONE
 
 - Create `packages/jobs` with a bounded worker that invokes the existing `scrape()` function for each scrape item.
 - Use a fresh per-attempt deadline and an `AbortController` connected to durable cancellation state.

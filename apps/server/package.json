@@ -15,6 +15,7 @@
     "@buncrawl/artifacts": "workspace:*",
     "@buncrawl/contracts": "workspace:*",
     "@buncrawl/db": "workspace:*",
+    "@buncrawl/jobs": "workspace:*",
     "@buncrawl/scrape": "workspace:*",
     "@trpc/server": "catalog:",
     "libsql": "catalog:",

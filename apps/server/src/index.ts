@@ -1,11 +1,12 @@
 import { appRouter } from "@buncrawl/api/routers/index";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
+import { JobWorker } from "@buncrawl/jobs";
 
 import { createContext } from "./context";
 import { ENV } from "./env.server";
 import { handleScrape } from "./routes/v1/scrape";
 import { SERVER_IDLE_TIMEOUT_SECONDS } from "./server-config";
-import { servicesReady } from "./services";
+import { db, servicesReady } from "./services";
 
 const corsHeaders = {
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
@@ -61,6 +62,13 @@ function preflight(request: Request): Response | undefined {
 
 async function main(): Promise<void> {
   await servicesReady;
+  const worker = new JobWorker({ db });
+  await worker.start();
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.on(signal, () => {
+      void worker.stop().finally(() => process.exit(0));
+    });
+  }
 
   const server = Bun.serve({
     idleTimeout: SERVER_IDLE_TIMEOUT_SECONDS,

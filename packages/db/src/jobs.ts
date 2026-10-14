@@ -25,6 +25,7 @@ export interface EnqueueJobInput {
 export interface ClaimJobItemInput {
   workerId: string;
   leaseMs: number;
+  type?: "batch_scrape";
   now?: Date;
 }
 
@@ -133,7 +134,8 @@ export async function claimJobItem(
       SELECT item.id
       FROM job_items AS item
       INNER JOIN jobs AS job ON job.id = item.job_id
-      WHERE job.state IN ('queued', 'running')
+       WHERE job.state IN ('queued', 'running')
+         AND (${input.type ?? null} IS NULL OR job.type = ${input.type ?? null})
         AND (
           item.state = 'queued'
           OR (item.state = 'running' AND item.lease_expires_at <= ${now.getTime()})
@@ -210,6 +212,25 @@ export async function failJobItem(
     error,
     now,
   });
+}
+
+export async function cancelRunningJobItem(
+  db: Database,
+  itemId: string,
+  workerId: string,
+  leaseVersion: number,
+  now = new Date(),
+) {
+  const [item] = await db
+    .update(jobItems)
+    .set({ state: "cancelled", finishedAt: now, updatedAt: now })
+    .where(sql`${jobItems.id} = ${itemId} AND ${jobItems.leaseOwner} = ${workerId}
+      AND ${jobItems.leaseVersion} = ${leaseVersion} AND ${jobItems.state} = 'running'
+      AND EXISTS (SELECT 1 FROM jobs WHERE jobs.id = ${jobItems.jobId} AND jobs.state = 'cancelling')`)
+    .returning();
+  if (!item) throw new StaleJobLeaseError(itemId);
+  await refreshJobProgress(db, item.jobId, now);
+  return item;
 }
 
 export async function requestJobCancellation(db: Database, jobId: string, now = new Date()) {
