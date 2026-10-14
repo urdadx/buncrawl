@@ -39,6 +39,7 @@ export class JobWorker {
   private stopped = false;
   private active = 0;
 
+  /** Configure the database-backed worker, its concurrency limits, and optional Redis dispatch. */
   constructor(options: WorkerOptions) {
     this.db = options.db;
     this.runScrape = options.scrapeItem ?? ((request, signal) => scrape(request, { signal }));
@@ -52,6 +53,7 @@ export class JobWorker {
     }
   }
 
+  /** Requeue expired leases, subscribe to wakeups, and start bounded claim loops. */
   async start(): Promise<void> {
     this.stopped = false;
     await recoverExpiredJobItems(this.db);
@@ -59,6 +61,7 @@ export class JobWorker {
     for (let i = 0; i < this.concurrency; i++) this.slots.push(this.loop());
   }
 
+  /** Abort active scrapes, wake idle loops, and wait for all slots to exit. */
   async stop(): Promise<void> {
     this.stopped = true;
     for (const controller of this.controllers) controller.abort();
@@ -68,10 +71,12 @@ export class JobWorker {
     this.dispatch.close();
   }
 
+  /** Release every slot waiting for new work, such as after a Redis notification. */
   private wake(): void {
     for (const waiter of this.waiters) waiter();
   }
 
+  /** Wait for a wakeup or the next database poll if notifications are unavailable. */
   private async wait(): Promise<void> {
     await new Promise<void>((resolve) => {
       const done = () => {
@@ -84,6 +89,7 @@ export class JobWorker {
     });
   }
 
+  /** Recover and claim work repeatedly, backing off when database operations fail. */
   private async loop(): Promise<void> {
     let backoff = 1;
     while (!this.stopped) {
@@ -109,6 +115,7 @@ export class JobWorker {
     }
   }
 
+  /** Run one leased scrape with a deadline, cancellation checks, heartbeats, and durable completion. */
   private async execute(item: LeasedJobItem): Promise<void> {
     const controller = new AbortController();
     this.controllers.add(controller);

@@ -92,7 +92,7 @@ export async function installBrowserNetworkGuard(
     async settled(maxWaitMs = 1000) {
       const expiresAt = performance.now() + Math.max(0, maxWaitMs);
       while (pending.size > 0 && performance.now() < expiresAt) {
-        await waitUpTo(Promise.all([...pending]), expiresAt - performance.now());
+        await waitUpTo(Promise.all(pending), expiresAt - performance.now());
       }
       await waitUpTo(commands, expiresAt - performance.now());
     },
@@ -120,6 +120,7 @@ async function waitUpTo(work: Promise<unknown>, timeoutMs: number): Promise<void
   }
 }
 
+// this is a simple concurrency limiter that allows a limited number of tasks to run concurrently. It maintains a count of active tasks and a queue of waiting tasks. When the number of active tasks reaches the limit, new tasks are added to the waiting queue and will only be executed when an active task completes. This ensures that no more than the specified limit of tasks are running at any given time.
 function createConcurrencyLimiter(limit: number) {
   if (!Number.isInteger(limit) || limit < 1) {
     throw new TypeError("maxConcurrentValidations must be a positive integer");

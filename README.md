@@ -34,6 +34,8 @@ pnpm run db:local
 
 2. Update your `.env` file in the `apps/server` directory with the appropriate connection details if needed.
 
+   Local development defaults to `.data/buncrawl.db` and `.data/artifacts` in the repository root. Docker Compose overrides these with persistent `/data` paths inside the container.
+
 3. Apply the schema to your database:
 
 ```bash
@@ -81,17 +83,11 @@ buncrawl/
 ## Available Scripts
 
 - `pnpm run dev`: Start all applications in development mode
-- `pnpm run build`: Build all applications
 - `pnpm run dev:web`: Start only the web application
 - `pnpm run dev:server`: Start only the server
-- `pnpm run check-types`: Check TypeScript types across all apps
 - `pnpm run db:push`: Push schema changes to database
 - `pnpm run db:generate`: Generate database client/types
 - `pnpm run db:migrate`: Run database migrations
-- `pnpm run db:studio`: Open database studio UI
 - `pnpm run db:local`: Start the local SQLite database
-- `pnpm run check`: Run Oxlint and Oxfmt
 - `pnpm run docker:build`: Build the Docker Compose images
 - `pnpm run docker:up`: Build and start the Docker Compose stack
-- `pnpm run docker:logs`: Tail logs from the Docker Compose stack
-- `pnpm run docker:down`: Stop the Docker Compose stack

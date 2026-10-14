@@ -234,21 +234,26 @@ function measureContentQuality(html: string): ContentQuality {
     const textLength = normalizedTextLength(
       document.body?.textContent || document.documentElement?.textContent,
     );
+
     const linkedText = Array.from(
       document.querySelectorAll("a") as unknown as Iterable<TextElement>,
     ).reduce((total, element) => total + normalizedTextLength(element.textContent), 0);
+
     const proseLength = Array.from(
       document.querySelectorAll("p, pre, blockquote, td") as unknown as Iterable<TextElement>,
     ).reduce((total, element) => total + normalizedTextLength(element.textContent), 0);
+
     const semanticLength = Array.from(
       document.querySelectorAll(
         "p, pre, blockquote, td, li, h1, h2, h3",
       ) as unknown as Iterable<TextElement>,
     ).reduce((total, element) => total + normalizedTextLength(element.textContent), 0);
+
     const headingCount = document.querySelectorAll("h1, h2, h3").length;
     const structuralCount = document.querySelectorAll("p, li, pre, blockquote, tr").length;
     const linkDensity = linkedText / Math.max(1, textLength);
     const semanticCoverage = Math.min(1, semanticLength / Math.max(1, textLength));
+
     const score =
       Math.min(textLength, 4_000) / 25 +
       Math.min(proseLength, 3_000) / 12 +
