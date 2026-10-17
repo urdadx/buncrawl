@@ -1,4 +1,4 @@
-import type { ScrapeRequest, ScrapeResponse } from "@buncrawl/contracts";
+import type { ScrapeDocument, ScrapeRequest, ScrapeResponse } from "@buncrawl/contracts";
 import {
   cancelRunningJobItem,
   claimJobItem,
@@ -18,6 +18,7 @@ import { RedisJobDispatch } from "./redis";
 export interface WorkerOptions {
   db: Database;
   scrapeItem?: (request: ScrapeRequest, signal: AbortSignal) => Promise<ScrapeResponse>;
+  persistDocument?: (document: ScrapeDocument) => Promise<ScrapeDocument>;
   dispatch?: Pick<RedisJobDispatch, "listen" | "active" | "close">;
   concurrency?: number;
   leaseMs?: number;
@@ -28,6 +29,7 @@ export interface WorkerOptions {
 export class JobWorker {
   private readonly db: Database;
   private readonly runScrape: NonNullable<WorkerOptions["scrapeItem"]>;
+  private readonly persistDocument: NonNullable<WorkerOptions["persistDocument"]>;
   private readonly dispatch: NonNullable<WorkerOptions["dispatch"]>;
   private readonly concurrency: number;
   private readonly leaseMs: number;
@@ -43,6 +45,7 @@ export class JobWorker {
   constructor(options: WorkerOptions) {
     this.db = options.db;
     this.runScrape = options.scrapeItem ?? ((request, signal) => scrape(request, { signal }));
+    this.persistDocument = options.persistDocument ?? (async (document) => document);
     this.dispatch = options.dispatch ?? new RedisJobDispatch();
     this.concurrency = options.concurrency ?? 2;
     this.leaseMs = options.leaseMs ?? 30_000;
@@ -169,7 +172,8 @@ export class JobWorker {
           retryable: false,
         });
       } else if (response.success) {
-        await completeJobItem(this.db, item.id, this.workerId, item.leaseVersion, response.data);
+        const document = await this.persistDocument(response.data);
+        await completeJobItem(this.db, item.id, this.workerId, item.leaseVersion, document);
       } else {
         await failJobItem(this.db, item.id, this.workerId, item.leaseVersion, {
           code: response.code,

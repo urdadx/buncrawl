@@ -5,11 +5,12 @@ import { JobWorker } from "@buncrawl/jobs";
 import { createContext } from "./context";
 import { ENV } from "./env.server";
 import { handleScrape } from "./routes/v1/scrape";
+import { createBatchScrapeHandler } from "./routes/v1/batch-scrape";
 import { SERVER_IDLE_TIMEOUT_SECONDS } from "./server-config";
-import { db, servicesReady } from "./services";
+import { db, persistJobDocument, servicesReady } from "./services";
 
 const corsHeaders = {
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
   "Access-Control-Allow-Origin": ENV.CORS_ORIGIN,
 };
 
@@ -62,7 +63,8 @@ function preflight(request: Request): Response | undefined {
 
 async function main(): Promise<void> {
   await servicesReady;
-  const worker = new JobWorker({ db });
+  const batchScrape = createBatchScrapeHandler(db);
+  const worker = new JobWorker({ db, persistDocument: persistJobDocument });
   await worker.start();
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
@@ -99,6 +101,10 @@ async function main(): Promise<void> {
           const response = preflight(request);
           return response ?? handleScrape(request);
         }),
+      "/v1/batch/scrape": (request) =>
+        handle(request, () => preflight(request) ?? batchScrape(request)),
+      "/v1/batch/scrape/:id": (request) =>
+        handle(request, () => preflight(request) ?? batchScrape(request, request.params.id)),
     },
     fetch(request) {
       return handle(request, () => {
