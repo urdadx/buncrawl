@@ -20,16 +20,20 @@ export function createBatchScrapeHandler(
     if (!id) {
       if (request.method !== "POST")
         return failure(405, "METHOD_NOT_ALLOWED", "Method not allowed", { Allow: "POST, OPTIONS" });
+
       let body: unknown;
+
       try {
         body = await request.json();
       } catch {
         return failure(400, "INVALID_JSON", "Request body must be JSON");
       }
+
       const parsed = v.safeParse(jobSubmissionSchema, {
         ...(typeof body === "object" && body !== null ? body : {}),
         type: "batch_scrape",
       });
+
       if (!parsed.success || parsed.output.type !== "batch_scrape") {
         return Response.json(
           {
@@ -40,17 +44,22 @@ export function createBatchScrapeHandler(
           { status: 400 },
         );
       }
+
       const pending = await db.all<{ count: number }>(
         "SELECT count(*) AS count FROM job_items WHERE state IN ('queued', 'running')",
       );
+
       if (Number(pending[0]?.count ?? 0) + parsed.output.requests.length > MAX_PENDING_ITEMS) {
         return failure(429, "QUEUE_FULL", "Batch queue is full");
       }
+
       const { job } = await enqueueJob(db, {
         submission: parsed.output,
         limits: { maxItems: parsed.output.requests.length, timeoutMs: 120_000 },
       });
+
       await notify(job.id).catch(() => undefined);
+
       return Response.json(
         { jobId: job.id, type: job.type, state: "queued", createdAt: job.createdAt.toISOString() },
         { status: 202 },
@@ -61,10 +70,14 @@ export function createBatchScrapeHandler(
       return failure(405, "METHOD_NOT_ALLOWED", "Method not allowed", {
         Allow: "GET, DELETE, OPTIONS",
       });
+
     if (!v.safeParse(jobIdSchema, id).success)
       return failure(400, "INVALID_JOB_ID", "Invalid job ID");
+
     const job = await getJob(db, id);
+
     if (!job || job.type !== "batch_scrape") return failure(404, "JOB_NOT_FOUND", "Job not found");
+
     if (request.method === "DELETE") {
       const cancelled = await requestJobCancellation(db, id);
       return Response.json({
@@ -76,7 +89,9 @@ export function createBatchScrapeHandler(
           new Date().toISOString(),
       });
     }
+
     const items = await getJobItems(db, id);
+
     return Response.json({
       jobId: job.id,
       type: job.type,

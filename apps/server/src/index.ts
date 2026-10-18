@@ -53,8 +53,6 @@ async function handle(
   }
 }
 
-// a preflight request in HTTP is an automatic check sent by a browser using the OPTIONS
-// method to see if a server allows a cross-origin request before sending the actual data
 function preflight(request: Request): Response | undefined {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204 });
@@ -63,9 +61,11 @@ function preflight(request: Request): Response | undefined {
 
 async function main(): Promise<void> {
   await servicesReady;
+
   const batchScrape = createBatchScrapeHandler(db);
   const worker = new JobWorker({ db, persistDocument: persistJobDocument });
   await worker.start();
+
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
       void worker.stop().finally(() => process.exit(0));

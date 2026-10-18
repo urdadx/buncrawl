@@ -38,6 +38,7 @@ export class JobWorker {
   private readonly controllers = new Set<AbortController>();
   private readonly slots: Promise<void>[] = [];
   private readonly waiters = new Set<() => void>();
+
   private stopped = false;
   private active = 0;
 
@@ -103,7 +104,9 @@ export class JobWorker {
           leaseMs: this.leaseMs,
           type: "batch_scrape",
         });
+
         if (this.stopped) break;
+
         if (item) {
           backoff = 1;
           await this.execute(item);
@@ -124,11 +127,14 @@ export class JobWorker {
     this.controllers.add(controller);
     this.active++;
     void this.dispatch.active(this.workerId, this.active, Math.ceil(this.leaseMs / 1000) + 1);
+
     const job = await getJob(this.db, item.jobId);
     const request = item.request as ScrapeRequest;
     const timeout = Math.min(request.timeout ?? 30_000, job?.limits.timeoutMs ?? 30_000);
     const timer = setTimeout(() => controller.abort(), timeout);
+
     let checking = false;
+
     const heartbeat = setInterval(
       () => {
         if (checking) return;
@@ -161,6 +167,7 @@ export class JobWorker {
     try {
       const response = await this.runScrape(request, controller.signal);
       const current = await getJob(this.db, item.jobId);
+
       if (current?.state === "cancelling") {
         await cancelRunningJobItem(this.db, item.id, this.workerId, item.leaseVersion);
       } else if (this.stopped) {
