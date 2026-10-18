@@ -81,6 +81,38 @@ test("processes items with bounded concurrency and persists partial success", as
   ]);
 });
 
+test("uses five bounded slots by default for independent batch URLs", async () => {
+  const { db, job } = await setup(Array.from({ length: 7 }, (_, i) => `https://${i}.example`));
+  let active = 0;
+  let peak = 0;
+  const worker = new JobWorker({
+    db,
+    dispatch,
+    pollMs: 20,
+    scrapeItem: async (request) => {
+      peak = Math.max(peak, ++active);
+      await Bun.sleep(60);
+      active--;
+      return {
+        success: true,
+        data: {
+          metadata: {
+            sourceURL: request.url,
+            finalURL: request.url,
+            statusCode: 200,
+            renderer: "fetch",
+          },
+        },
+      };
+    },
+  });
+  workers.push(worker);
+  await worker.start();
+  await until(async () => (await getJob(db, job.id))?.state === "completed");
+  expect(peak).toBe(5);
+  expect((await getJob(db, job.id))?.progress.succeeded).toBe(7);
+});
+
 test("observes durable cancellation and aborts an active scrape", async () => {
   const { db, job } = await setup(["https://one.example", "https://two.example"]);
   let aborted = false;

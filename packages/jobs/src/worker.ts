@@ -38,6 +38,7 @@ export class JobWorker {
   private readonly controllers = new Set<AbortController>();
   private readonly slots: Promise<void>[] = [];
   private readonly waiters = new Set<() => void>();
+  private recoveryTimer?: ReturnType<typeof setInterval>;
 
   private stopped = false;
   private active = 0;
@@ -48,9 +49,9 @@ export class JobWorker {
     this.runScrape = options.scrapeItem ?? ((request, signal) => scrape(request, { signal }));
     this.persistDocument = options.persistDocument ?? (async (document) => document);
     this.dispatch = options.dispatch ?? new RedisJobDispatch();
-    this.concurrency = options.concurrency ?? 2;
+    this.concurrency = options.concurrency ?? 5;
     this.leaseMs = options.leaseMs ?? 30_000;
-    this.pollMs = options.pollMs ?? 1000;
+    this.pollMs = options.pollMs ?? 250;
     this.workerId = options.workerId ?? crypto.randomUUID();
     if (![this.concurrency, this.leaseMs, this.pollMs].every((n) => Number.isInteger(n) && n > 0)) {
       throw new TypeError("Worker limits must be positive integers");
@@ -61,6 +62,12 @@ export class JobWorker {
   async start(): Promise<void> {
     this.stopped = false;
     await recoverExpiredJobItems(this.db);
+    this.recoveryTimer = setInterval(() => {
+      if (this.stopped) return;
+      void recoverExpiredJobItems(this.db).catch((error) =>
+        console.error("Job lease recovery failed", error),
+      );
+    }, Math.max(1000, this.leaseMs));
     void this.dispatch.listen(() => this.wake()).catch(() => undefined);
     for (let i = 0; i < this.concurrency; i++) this.slots.push(this.loop());
   }
@@ -68,6 +75,7 @@ export class JobWorker {
   /** Abort active scrapes, wake idle loops, and wait for all slots to exit. */
   async stop(): Promise<void> {
     this.stopped = true;
+    if (this.recoveryTimer) clearInterval(this.recoveryTimer);
     for (const controller of this.controllers) controller.abort();
     this.wake();
     await Promise.all(this.slots);
@@ -98,7 +106,6 @@ export class JobWorker {
     let backoff = 1;
     while (!this.stopped) {
       try {
-        await recoverExpiredJobItems(this.db);
         const item = await claimJobItem(this.db, {
           workerId: this.workerId,
           leaseMs: this.leaseMs,
@@ -139,6 +146,7 @@ export class JobWorker {
       () => {
         if (checking) return;
         checking = true;
+
         void (async () => {
           try {
             const current = await getJob(this.db, item.jobId);
