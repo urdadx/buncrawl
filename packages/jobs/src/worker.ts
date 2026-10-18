@@ -62,12 +62,15 @@ export class JobWorker {
   async start(): Promise<void> {
     this.stopped = false;
     await recoverExpiredJobItems(this.db);
-    this.recoveryTimer = setInterval(() => {
-      if (this.stopped) return;
-      void recoverExpiredJobItems(this.db).catch((error) =>
-        console.error("Job lease recovery failed", error),
-      );
-    }, Math.max(1000, this.leaseMs));
+    this.recoveryTimer = setInterval(
+      () => {
+        if (this.stopped) return;
+        void recoverExpiredJobItems(this.db).catch((error) =>
+          console.error("Job lease recovery failed", error),
+        );
+      },
+      Math.max(1000, this.leaseMs),
+    );
     void this.dispatch.listen(() => this.wake()).catch(() => undefined);
     for (let i = 0; i < this.concurrency; i++) this.slots.push(this.loop());
   }
@@ -202,7 +205,7 @@ export class JobWorker {
         if (current?.state === "cancelling") {
           await cancelRunningJobItem(this.db, item.id, this.workerId, item.leaseVersion);
         } else if (this.stopped) {
-          // Recover on restart.
+          // Leave the lease for the next process rather than recording shutdown as a scrape failure.
         } else {
           await failJobItem(this.db, item.id, this.workerId, item.leaseVersion, {
             code: "SCRAPE_FAILED",
