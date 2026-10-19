@@ -6,6 +6,7 @@ const MAX_BATCH_ITEMS = 1000;
 const MAX_DISCOVERED_URLS = 100_000;
 const MAX_CRAWL_DEPTH = 100;
 const MAX_JOB_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_CRAWL_BYTES = 1024 * 1024 * 1024;
 
 const nonNegativeInteger = (message: string) =>
   v.pipe(v.number(), v.integer(message), v.minValue(0, message));
@@ -116,13 +117,33 @@ const mapSubmissionSchema = v.strictObject({
   type: v.literal("map"),
   url: httpUrl,
   maxUrls: v.optional(positiveInteger(MAX_DISCOVERED_URLS, "maxUrls")),
+  maxDepth: v.optional(
+    v.pipe(
+      nonNegativeInteger("maxDepth must be a non-negative integer"),
+      v.maxValue(MAX_CRAWL_DEPTH),
+    ),
+  ),
+  maxBytes: v.optional(positiveInteger(MAX_CRAWL_BYTES, "maxBytes")),
+  timeoutMs: v.optional(positiveInteger(MAX_JOB_TIMEOUT_MS, "timeoutMs")),
+  includeSubdomains: v.optional(v.boolean()),
+  pathPrefix: v.optional(v.boolean()),
 });
 
 const crawlSubmissionSchema = v.strictObject({
   type: v.literal("crawl"),
   url: httpUrl,
   maxPages: v.optional(positiveInteger(MAX_DISCOVERED_URLS, "maxPages")),
-  maxDepth: v.optional(positiveInteger(MAX_CRAWL_DEPTH, "maxDepth")),
+  maxDepth: v.optional(
+    v.pipe(
+      nonNegativeInteger("maxDepth must be a non-negative integer"),
+      v.maxValue(MAX_CRAWL_DEPTH),
+    ),
+  ),
+  maxBytes: v.optional(positiveInteger(MAX_CRAWL_BYTES, "maxBytes")),
+  timeoutMs: v.optional(positiveInteger(MAX_JOB_TIMEOUT_MS, "timeoutMs")),
+  includeSubdomains: v.optional(v.boolean()),
+  pathPrefix: v.optional(v.boolean()),
+  scrapeOptions: v.optional(v.omit(scrapeRequestSchema, ["url"])),
 });
 
 export const jobSubmissionSchema = v.variant("type", [

@@ -1,13 +1,22 @@
 {
   "name": "@buncrawl/jobs",
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "check-types": "tsc --noEmit", "test": "bun test test" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "bun test test"
+  },
   "dependencies": {
     "@buncrawl/artifacts": "workspace:*",
     "@buncrawl/contracts": "workspace:*",
+    "@buncrawl/core": "workspace:*",
+    "@buncrawl/crawl": "workspace:*",
     "@buncrawl/db": "workspace:*",
-    "@buncrawl/scrape": "workspace:*"
+    "@buncrawl/fetcher": "workspace:*",
+    "@buncrawl/scrape": "workspace:*",
+    "@buncrawl/security": "workspace:*"
   },
   "devDependencies": {
     "@buncrawl/config": "workspace:*",

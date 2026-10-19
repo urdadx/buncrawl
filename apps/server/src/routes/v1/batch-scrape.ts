@@ -2,7 +2,7 @@ import { jobIdSchema, jobSubmissionSchema } from "@buncrawl/contracts";
 import {
   enqueueJob,
   getJob,
-  getJobItems,
+  getJobItemsPage,
   JobQueueFullError,
   requestJobCancellation,
   type Database,
@@ -11,6 +11,8 @@ import { RedisJobDispatch } from "@buncrawl/jobs";
 import * as v from "valibot";
 
 const MAX_PENDING_ITEMS = 10_000;
+const MAX_RESULT_PAGE_BYTES = 1024 * 1024;
+const DEFAULT_RESULT_PAGE_SIZE = 100;
 const dispatch = new RedisJobDispatch();
 
 export function createBatchScrapeHandler(
@@ -98,7 +100,36 @@ export function createBatchScrapeHandler(
       });
     }
 
-    const items = await getJobItems(db, id);
+    const url = new URL(request.url);
+    const cursor = parsePageInteger(url.searchParams.get("cursor"), 0, Number.MAX_SAFE_INTEGER);
+    const limit = parsePageInteger(url.searchParams.get("limit"), DEFAULT_RESULT_PAGE_SIZE, 100);
+    if (cursor === undefined || limit === undefined)
+      return failure(400, "INVALID_PAGINATION", "cursor and limit must be valid integers");
+    const rows = await getJobItemsPage(db, id, cursor, limit);
+    const items: Record<string, unknown>[] = [];
+    let size = 0;
+    for (const item of rows.slice(0, limit)) {
+      const projected = {
+        itemId: item.id,
+        index: item.index,
+        url: (item.request as { url: string }).url,
+        state: item.state,
+        ...(item.state === "completed" ? { document: item.result } : {}),
+        ...(item.state === "failed" ? { error: item.error } : {}),
+      };
+      const bytes = Buffer.byteLength(JSON.stringify(projected));
+      // A single large item is still returned so a cursor can always advance.
+      if (items.length > 0 && size + bytes > MAX_RESULT_PAGE_BYTES) break;
+      size += bytes;
+      items.push(projected);
+    }
+    const nextIndex = cursor + items.length;
+    const hasMore = rows.length > items.length;
+    if (hasMore) {
+      url.search = "";
+      url.searchParams.set("cursor", String(nextIndex));
+      url.searchParams.set("limit", String(limit));
+    }
 
     return Response.json({
       jobId: job.id,
@@ -114,16 +145,22 @@ export function createBatchScrapeHandler(
       ...(job.error ? { error: job.error } : {}),
       progress: job.progress,
       limits: job.limits,
-      items: items.map((item) => ({
-        itemId: item.id,
-        index: item.index,
-        url: (item.request as { url: string }).url,
-        state: item.state,
-        ...(item.state === "completed" ? { document: item.result } : {}),
-        ...(item.state === "failed" ? { error: item.error } : {}),
-      })),
+      items,
+      ...(hasMore ? { next: url.href } : {}),
     });
   };
+}
+
+function parsePageInteger(
+  raw: string | null,
+  fallback: number,
+  maximum: number,
+): number | undefined {
+  if (raw === null) return fallback;
+  if (!/^(0|[1-9]\d*)$/.test(raw)) return;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value > maximum || (maximum === 100 && value < 1)) return;
+  return value;
 }
 
 function failure(status: number, code: string, error: string, headers?: Record<string, string>) {

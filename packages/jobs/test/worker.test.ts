@@ -196,10 +196,12 @@ test("opens a new database connection after restart and completes without Redis"
       leaseMs: 100,
       now: new Date(Date.now() - 1000),
     });
+    original.$client.close();
     const restarted = createDb({ DATABASE_URL: url });
     const worker = new JobWorker({
       db: restarted,
       dispatch,
+      concurrency: 1,
       pollMs: 20,
       scrapeItem: async (request) => ({
         success: true,

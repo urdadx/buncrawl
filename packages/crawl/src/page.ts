@@ -67,5 +67,6 @@ export async function fetchCrawlPage(
     statusCode: page.statusCode,
     byteSize: page.rawBody.byteLength,
     links,
+    fetched: page,
   };
 }

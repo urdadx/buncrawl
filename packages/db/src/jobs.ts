@@ -10,7 +10,7 @@ import {
   type JobState,
   type JobSubmission,
 } from "@buncrawl/contracts";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 
 import type { Database } from "./index";
 import { jobEvents, jobItems, jobs, type JobItemRecord } from "./schema";
@@ -25,7 +25,7 @@ export interface EnqueueJobInput {
 export interface ClaimJobItemInput {
   workerId: string;
   leaseMs: number;
-  type?: "batch_scrape";
+  type?: "batch_scrape" | "map" | "crawl";
   now?: Date;
 }
 
@@ -113,6 +113,15 @@ export async function getJob(db: Database, jobId: string) {
 
 export async function getJobItems(db: Database, jobId: string) {
   return db.select().from(jobItems).where(eq(jobItems.jobId, jobId)).orderBy(jobItems.index);
+}
+
+export async function getJobItemsPage(db: Database, jobId: string, cursor: number, limit: number) {
+  return db
+    .select()
+    .from(jobItems)
+    .where(and(eq(jobItems.jobId, jobId), gte(jobItems.index, cursor)))
+    .orderBy(jobItems.index)
+    .limit(limit + 1);
 }
 
 export async function getJobEvents(db: Database, jobId: string, afterSequence = 0) {
@@ -398,7 +407,8 @@ async function refreshJobProgress(db: Database, jobId: string, now: Date): Promi
   let state = job.state;
   let finishedAt = job.finishedAt;
   if (progress.queued === 0 && progress.running === 0) {
-    state = job.state === "cancelling" ? "cancelled" : "completed";
+    state =
+      job.state === "failed" ? "failed" : job.state === "cancelling" ? "cancelled" : "completed";
     finishedAt ??= now;
   }
   await db

@@ -166,6 +166,9 @@ importers:
       '@buncrawl/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@buncrawl/crawl':
+        specifier: workspace:*
+        version: link:../../packages/crawl
       '@buncrawl/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -175,6 +178,9 @@ importers:
       '@buncrawl/scrape':
         specifier: workspace:*
         version: link:../../packages/scrape
+      '@buncrawl/security':
+        specifier: workspace:*
+        version: link:../../packages/security
       '@trpc/server':
         specifier: 'catalog:'
         version: 11.19.0(typescript@6.0.3)
@@ -464,12 +470,24 @@ importers:
       '@buncrawl/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@buncrawl/core':
+        specifier: workspace:*
+        version: link:../core
+      '@buncrawl/crawl':
+        specifier: workspace:*
+        version: link:../crawl
       '@buncrawl/db':
         specifier: workspace:*
         version: link:../db
+      '@buncrawl/fetcher':
+        specifier: workspace:*
+        version: link:../fetcher
       '@buncrawl/scrape':
         specifier: workspace:*
         version: link:../scrape
+      '@buncrawl/security':
+        specifier: workspace:*
+        version: link:../security
     devDependencies:
       '@buncrawl/config':
         specifier: workspace:*

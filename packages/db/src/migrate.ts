@@ -115,6 +115,8 @@ export async function migrateDb(db: Database): Promise<void> {
       state TEXT NOT NULL DEFAULT 'queued' CHECK (state IN ('queued', 'running', 'completed', 'failed', 'cancelled')),
       final_url TEXT,
       final_origin TEXT,
+      document_json TEXT,
+      error_json TEXT,
       byte_size INTEGER NOT NULL DEFAULT 0 CHECK (byte_size >= 0),
       reserved_bytes INTEGER NOT NULL DEFAULT 0 CHECK (reserved_bytes >= 0),
       lease_owner TEXT,

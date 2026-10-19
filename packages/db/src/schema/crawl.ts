@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import type { JobError, ScrapeDocument } from "@buncrawl/contracts";
 import { check, index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 import { jobs } from "./jobs";
@@ -40,6 +41,8 @@ export const crawlFrontier = sqliteTable(
       .default("queued"),
     finalUrl: text("final_url"),
     finalOrigin: text("final_origin"),
+    document: text("document_json", { mode: "json" }).$type<ScrapeDocument>(),
+    error: text("error_json", { mode: "json" }).$type<JobError>(),
     byteSize: integer("byte_size").notNull().default(0),
     reservedBytes: integer("reserved_bytes").notNull().default(0),
     leaseOwner: text("lease_owner"),

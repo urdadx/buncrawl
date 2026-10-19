@@ -20,9 +20,11 @@ export interface CrawlScope {
 export function withinCrawlScope(candidate: string, scope: CrawlScope): boolean {
   const base = canonicalCrawlUrl(scope.url);
   const target = canonicalCrawlUrl(candidate);
+
   if (!base || !target) return false;
   const root = new URL(base);
   const url = new URL(target);
+
   if (root.protocol !== url.protocol || root.port !== url.port) return false;
   if (
     url.hostname !== root.hostname &&
@@ -30,6 +32,7 @@ export function withinCrawlScope(candidate: string, scope: CrawlScope): boolean 
   )
     return false;
   if (!scope.pathPrefix) return true;
+
   const prefix = root.pathname.endsWith("/") ? root.pathname : `${root.pathname}/`;
   return url.pathname === root.pathname || url.pathname.startsWith(prefix);
 }

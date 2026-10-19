@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
+import type { JobError, JobProgress, ScrapeDocument } from "@buncrawl/contracts";
 
 import type { Database } from "./index";
-import { crawlFrontier, crawlHosts } from "./schema";
+import { crawlFrontier, crawlHosts, jobs } from "./schema";
 
 export interface CrawlLimits {
   maxDepth: number;
@@ -154,7 +155,13 @@ export async function heartbeatCrawlUrl(
 export async function finishCrawlUrl(
   db: Database,
   lease: CrawlLease,
-  result: { state: "completed" | "failed"; byteSize: number; finalUrl?: string },
+  result: {
+    state: "completed" | "failed";
+    byteSize: number;
+    finalUrl?: string;
+    document?: ScrapeDocument;
+    error?: JobError;
+  },
   now = new Date(),
 ): Promise<boolean> {
   if (!Number.isSafeInteger(result.byteSize) || result.byteSize < 0)
@@ -171,6 +178,8 @@ export async function finishCrawlUrl(
       byteSize: result.byteSize,
       finalUrl: result.finalUrl,
       finalOrigin,
+      document: result.document,
+      error: result.error,
       leaseOwner: null,
       leaseExpiresAt: null,
       reservedBytes: 0,
@@ -198,12 +207,80 @@ export async function recoverCrawlLeases(db: Database, now = new Date()): Promis
   return rows.length;
 }
 
+export async function cancelRunningCrawlUrl(
+  db: Database,
+  lease: CrawlLease,
+  now = new Date(),
+): Promise<boolean> {
+  const [row] = await db
+    .update(crawlFrontier)
+    .set({
+      state: "cancelled",
+      leaseOwner: null,
+      leaseExpiresAt: null,
+      reservedBytes: 0,
+      updatedAt: now,
+    })
+    .where(sql`${activeCrawlLease(lease, now)} AND EXISTS (
+    SELECT 1 FROM jobs WHERE id = ${lease.jobId} AND state IN ('cancelling', 'cancelled')
+  )`)
+    .returning({ url: crawlFrontier.url });
+  return Boolean(row);
+}
+
 export async function getCrawlFrontier(db: Database, jobId: string) {
   return db
     .select()
     .from(crawlFrontier)
     .where(sql`${crawlFrontier.jobId} = ${jobId}`)
     .orderBy(crawlFrontier.depth, crawlFrontier.createdAt);
+}
+
+export async function getCrawlFrontierPage(
+  db: Database,
+  jobId: string,
+  offset: number,
+  limit: number,
+) {
+  return db
+    .select()
+    .from(crawlFrontier)
+    .where(sql`${crawlFrontier.jobId} = ${jobId}`)
+    .orderBy(crawlFrontier.createdAt, crawlFrontier.url)
+    .limit(limit + 1)
+    .offset(offset);
+}
+
+export async function getCrawlProgress(db: Database, jobId: string): Promise<JobProgress> {
+  const counts = await db.all<{ state: string; count: number }>(sql`
+    SELECT state, count(*) AS count FROM crawl_frontier WHERE job_id = ${jobId} GROUP BY state`);
+  const byState = new Map(counts.map((row) => [row.state, Number(row.count)]));
+  const progress: JobProgress = {
+    total: [...byState.values()].reduce((sum, count) => sum + count, 0),
+    queued: byState.get("queued") ?? 0,
+    running: byState.get("running") ?? 0,
+    succeeded: byState.get("completed") ?? 0,
+    failed: byState.get("failed") ?? 0,
+    cancelled: byState.get("cancelled") ?? 0,
+  };
+  return progress;
+}
+
+export async function syncCrawlProgress(db: Database, jobId: string): Promise<JobProgress> {
+  const progress = await getCrawlProgress(db, jobId);
+  await db
+    .update(jobs)
+    .set({ progress, updatedAt: new Date() })
+    .where(sql`${jobs.id} = ${jobId}`);
+  return progress;
+}
+
+export async function cancelQueuedCrawlUrls(db: Database, jobId: string): Promise<void> {
+  await db
+    .update(crawlFrontier)
+    .set({ state: "cancelled", updatedAt: new Date() })
+    .where(sql`${crawlFrontier.jobId} = ${jobId} AND ${crawlFrontier.state} = 'queued'`);
+  await syncCrawlProgress(db, jobId);
 }
 
 export async function getCrawlHost(db: Database, jobId: string, origin: string) {
@@ -224,6 +301,24 @@ export async function remainingCrawlBytes(
     sql`SELECT coalesce(sum(byte_size + reserved_bytes), 0) AS used FROM crawl_frontier WHERE job_id = ${jobId}`,
   );
   return Math.max(0, maxBytes - Number(rows[0]?.used ?? 0));
+}
+
+export async function crawlLimitsExhausted(
+  db: Database,
+  jobId: string,
+  limits: CrawlLimits,
+  now = new Date(),
+): Promise<boolean> {
+  const [row] = await db.all<{ pages: number; bytes: number; createdAt: number }>(sql`
+    SELECT (SELECT count(*) FROM crawl_frontier WHERE job_id = ${jobId} AND state = 'completed') AS pages,
+      (SELECT coalesce(sum(byte_size), 0) FROM crawl_frontier WHERE job_id = ${jobId}) AS bytes,
+      created_at AS createdAt FROM jobs WHERE id = ${jobId}`);
+  return (
+    !row ||
+    Number(row.pages) >= limits.maxPages ||
+    Number(row.bytes) >= limits.maxBytes ||
+    Number(row.createdAt) + limits.maxElapsedMs <= now.getTime()
+  );
 }
 
 export async function saveCrawlRobots(

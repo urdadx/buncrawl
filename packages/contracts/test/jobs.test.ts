@@ -27,7 +27,14 @@ describe("job submission contracts", () => {
       requests: [{ url: "https://example.com", formats: ["markdown"] }],
     },
     { type: "map", url: "https://example.com", maxUrls: 500 },
+    { type: "map", url: "https://example.com", maxDepth: 0, maxBytes: 1024, timeoutMs: 1000 },
     { type: "crawl", url: "https://example.com", maxPages: 100, maxDepth: 5 },
+    {
+      type: "crawl",
+      url: "https://example.com",
+      maxDepth: 0,
+      scrapeOptions: { renderJs: false, formats: ["markdown"] },
+    },
   ])("accepts a strict $type submission", (submission) => {
     expect(v.safeParse(jobSubmissionSchema, submission).success).toBe(true);
   });
@@ -36,6 +43,8 @@ describe("job submission contracts", () => {
     { type: "batch_scrape", requests: [] },
     { type: "map", url: "file:///etc/passwd" },
     { type: "crawl", url: "https://example.com", maxDepth: 101 },
+    { type: "map", url: "https://example.com", maxBytes: 0 },
+    { type: "crawl", url: "https://example.com", timeoutMs: -1 },
     { type: "map", url: "https://example.com", unknown: true },
     { type: "unsupported", url: "https://example.com" },
   ])("rejects invalid submissions", (submission) => {

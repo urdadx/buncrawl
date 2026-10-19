@@ -325,7 +325,7 @@ Build this work in dependency order. The first vertical slice is a durable `/v1/
 #### 12.5 First Vertical Slice: `/v1/batch/scrape` -> DONE
 
 - Implement `POST /v1/batch/scrape` to validate URLs and options, persist the job and items, notify workers, and return a job ID.
-- Implement `GET /v1/batch/scrape/:id` to return status, progress, completed items, and stable errors.
+- Implement `GET /v1/batch/scrape/:id` to return status, progress, completed items, and stable errors; page items with `cursor`/`limit` and a `next` URL so large batches do not inflate status polls.
 - Implement `DELETE /v1/batch/scrape/:id` to request durable cancellation.
 - Bound item concurrency and queue size.
 - Support partial success without failing completed items.
@@ -339,11 +339,11 @@ Build this work in dependency order. The first vertical slice is a durable `/v1/
 - Atomically deduplicate frontier entries across redirects and discovered links.
 - Implement depth, page, byte, and elapsed-time limits.
 - Retrieve, parse, cache, and enforce `robots.txt` by user agent.
-- Parse sitemap and sitemap-index files with response-size, URL-count, and nesting limits.
+- Parse sitemap and sitemap-index files with response-size, decompression, URL-count, and nesting limits; fetch sibling files with bounded concurrency and interleave capped results across leaves.
 - Enforce per-host concurrency, minimum delay, and robots crawl delay.
 - Reuse URL/DNS safety, manual redirect validation, fetch response limits, extraction, and the job lease model.
 
-#### 12.7 `/v1/map` Then `/v1/crawl`
+#### 12.7 `/v1/map` Then `/v1/crawl` -> DONE
 
 - Implement `/v1/map` first to exercise discovery, scope, robots, sitemaps, deduplication, and host scheduling without storing every document.
 - Implement `/v1/crawl` on the same frontier and execute `scrape()` for each accepted URL.

@@ -9,11 +9,13 @@ interface Rule {
   allow: boolean;
   path: string;
 }
+
 interface Group {
   agents: string[];
   rules: Rule[];
   crawlDelayMs?: number;
 }
+
 export interface RobotsFile {
   groups: Group[];
   sitemaps: string[];
@@ -22,14 +24,18 @@ export interface RobotsFile {
 export function parseRobots(body: string): RobotsFile {
   const groups: Group[] = [];
   const sitemaps: string[] = [];
+
   let group: Group | undefined;
   let directivesStarted = false;
+
   for (const line of body.split(/\r?\n/)) {
     const cleaned = line.replace(/#.*$/, "").trim();
     const index = cleaned.indexOf(":");
+
     if (index < 0) continue;
     const name = cleaned.slice(0, index).trim().toLowerCase();
     const value = cleaned.slice(index + 1).trim();
+
     if (name === "sitemap") {
       if (value) sitemaps.push(value);
     } else if (name === "user-agent") {
@@ -63,6 +69,7 @@ function selectedGroups(file: RobotsFile, userAgent: string): Group[] {
       ),
     ),
   }));
+
   const longest = Math.max(-1, ...matches.map(({ score }) => score));
   return matches.filter(({ score }) => score === longest && score >= 0).map(({ group }) => group);
 }
@@ -71,6 +78,7 @@ export function robotsAllows(file: RobotsFile, url: string, userAgent: string): 
   const target = new URL(url);
   const path = target.pathname + target.search;
   let winner: { length: number; allow: boolean } | undefined;
+
   for (const group of selectedGroups(file, userAgent)) {
     for (const rule of group.rules) {
       const expression = `^${rule.path
@@ -78,6 +86,7 @@ export function robotsAllows(file: RobotsFile, url: string, userAgent: string): 
         .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
         .join(".*")
         .replace(/\\\$$/, "$")}`;
+
       if (new RegExp(expression).test(path)) {
         const length = rule.path.replaceAll("*", "").replace(/\$$/, "").length;
         if (!winner || length > winner.length || (length === winner.length && rule.allow))
@@ -109,12 +118,15 @@ export async function loadRobots(
   const now = options.now ?? new Date();
   await scheduleCrawlHost(db, jobId, origin);
   const cached = await getCrawlHost(db, jobId, origin);
+
   if (
     cached?.robotsFetchedAt &&
     cached.robotsBody !== null &&
     now.getTime() - cached.robotsFetchedAt.getTime() < (options.ttlMs ?? ROBOTS_TTL_MS)
-  )
+  ) {
     return parseRobots(cached.robotsBody);
+  }
+
   const result = await fetchPage(new URL("/robots.txt", origin), {
     deadline: options.deadline ?? new Deadline(8000),
     maxResponseBytes: MAX_ROBOTS_BYTES,
@@ -122,6 +134,7 @@ export async function loadRobots(
     fetchImpl: options.fetchImpl,
     resolver: options.resolver,
   });
+
   // Missing robots allows crawling; inaccessible or broken robots fails closed.
   const body =
     result.statusCode === 404
@@ -129,6 +142,7 @@ export async function loadRobots(
       : result.statusCode >= 400
         ? "User-agent: *\nDisallow: /"
         : result.body;
+
   const file = parseRobots(body);
   await saveCrawlRobots(db, jobId, origin, body, robotsCrawlDelay(file, userAgent), now);
   return file;
