@@ -36,6 +36,7 @@ export async function scheduleCrawlHost(
 ): Promise<void> {
   const maxConcurrency = options.maxConcurrency ?? 1;
   const minDelayMs = options.minDelayMs ?? 0;
+
   if (
     !Number.isSafeInteger(maxConcurrency) ||
     maxConcurrency < 1 ||
@@ -43,9 +44,11 @@ export async function scheduleCrawlHost(
     minDelayMs < 0
   )
     throw new TypeError("Invalid host limits");
+
   await db.run(sql`INSERT INTO crawl_hosts (job_id, origin, max_concurrency, min_delay_ms)
     VALUES (${jobId}, ${origin}, ${maxConcurrency}, ${minDelayMs})
     ON CONFLICT(job_id, origin) DO NOTHING`);
+
   if (options.maxConcurrency !== undefined || options.minDelayMs !== undefined)
     await db.run(sql`UPDATE crawl_hosts SET
       max_concurrency = ${maxConcurrency}, min_delay_ms = max(min_delay_ms, ${minDelayMs})
@@ -68,17 +71,23 @@ export async function enqueueCrawlUrl(
     ![limits.maxPages, limits.maxBytes, limits.maxElapsedMs].every(
       (n) => Number.isSafeInteger(n) && n > 0,
     )
-  )
+  ) {
     throw new TypeError("Invalid crawl limits or depth");
+  }
+
   if (entry.depth > limits.maxDepth) return false;
   const parsed = new URL(entry.url);
+
   if (
     (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
     parsed.origin !== entry.origin ||
     parsed.hash
-  )
+  ) {
     throw new TypeError("Frontier URLs must be canonical HTTP(S) URLs matching their host");
+  }
+
   await scheduleCrawlHost(db, jobId, entry.origin);
+
   const result = await db.run(sql`
     INSERT OR IGNORE INTO crawl_frontier (job_id, url, origin, depth, state, created_at, updated_at)
     SELECT ${jobId}, ${entry.url}, ${entry.origin}, ${entry.depth}, 'queued', ${now.getTime()}, ${now.getTime()}
@@ -101,6 +110,7 @@ export async function claimCrawlUrl(
 ): Promise<CrawlLease | undefined> {
   if (!workerId || !Number.isSafeInteger(leaseMs) || leaseMs < 1)
     throw new TypeError("Invalid crawl lease");
+
   const [row] = await db
     .update(crawlFrontier)
     .set({
@@ -125,7 +135,9 @@ export async function claimCrawlUrl(
     ORDER BY f.depth, f.created_at, f.url LIMIT 1
   )`)
     .returning();
+
   if (!row) return;
+
   return {
     jobId,
     url: row.url,
@@ -166,11 +178,15 @@ export async function finishCrawlUrl(
 ): Promise<boolean> {
   if (!Number.isSafeInteger(result.byteSize) || result.byteSize < 0)
     throw new TypeError("Invalid byte size");
+
   if (result.byteSize > lease.byteBudget)
     throw new TypeError("Page exceeds its reserved byte budget");
+
   const finalOrigin = result.finalUrl ? new URL(result.finalUrl).origin : null;
-  if (finalOrigin && finalOrigin !== lease.origin)
+  if (finalOrigin && finalOrigin !== lease.origin) {
     await scheduleCrawlHost(db, lease.jobId, finalOrigin);
+  }
+
   const [row] = await db
     .update(crawlFrontier)
     .set({
@@ -255,6 +271,7 @@ export async function getCrawlProgress(db: Database, jobId: string): Promise<Job
   const counts = await db.all<{ state: string; count: number }>(sql`
     SELECT state, count(*) AS count FROM crawl_frontier WHERE job_id = ${jobId} GROUP BY state`);
   const byState = new Map(counts.map((row) => [row.state, Number(row.count)]));
+
   const progress: JobProgress = {
     total: [...byState.values()].reduce((sum, count) => sum + count, 0),
     queued: byState.get("queued") ?? 0,

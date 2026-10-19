@@ -5,6 +5,7 @@ import {
   type ScrapeDocument,
 } from "@buncrawl/contracts";
 import { canonicalCrawlUrl } from "@buncrawl/crawl";
+
 import {
   cancelQueuedCrawlUrls,
   enqueueJob,
@@ -14,6 +15,7 @@ import {
   requestJobCancellation,
   type Database,
 } from "@buncrawl/db";
+
 import { crawlJobLimits, RedisJobDispatch } from "@buncrawl/jobs";
 import { validateUrl } from "@buncrawl/security";
 import * as v from "valibot";
@@ -32,15 +34,18 @@ export function createDiscoveryHandler(
       if (request.method !== "POST")
         return failure(405, "METHOD_NOT_ALLOWED", "Method not allowed", { Allow: "POST, OPTIONS" });
       let body: unknown;
+
       try {
         body = await request.json();
       } catch {
         return failure(400, "INVALID_JSON", "Request body must be JSON");
       }
+
       const parsed = v.safeParse(jobSubmissionSchema, {
         ...(typeof body === "object" && body !== null ? body : {}),
         type,
       });
+
       if (!parsed.success || parsed.output.type !== type)
         return Response.json(
           {
@@ -50,33 +55,41 @@ export function createDiscoveryHandler(
           },
           { status: 400 },
         );
+
       try {
         validateUrl(parsed.output.url);
       } catch {
         return failure(400, "INVALID_URL", "URL is not allowed");
       }
+
       const url = canonicalCrawlUrl(parsed.output.url);
       if (!url) return failure(400, "INVALID_URL", "URL is not allowed");
       const submission = { ...parsed.output, url };
       const limits = crawlJobLimits(submission);
+
       const { job } = await enqueueJob(db, {
         submission,
         limits: { maxItems: limits.maxPages, timeoutMs: limits.maxElapsedMs },
       });
+
       await notify(job.id).catch(() => undefined);
       return Response.json(
         { jobId: job.id, type, state: "queued", createdAt: job.createdAt.toISOString() },
         { status: 202 },
       );
     }
+
     if (request.method !== "GET" && request.method !== "DELETE")
       return failure(405, "METHOD_NOT_ALLOWED", "Method not allowed", {
         Allow: "GET, DELETE, OPTIONS",
       });
+
     if (!v.safeParse(jobIdSchema, id).success)
       return failure(400, "INVALID_JOB_ID", "Invalid job ID");
+
     const job = await getJob(db, id);
     if (!job || job.type !== type) return failure(404, "JOB_NOT_FOUND", "Job not found");
+
     if (request.method === "DELETE") {
       const cancelled = await requestJobCancellation(db, id);
       await cancelQueuedCrawlUrls(db, id);
@@ -89,12 +102,15 @@ export function createDiscoveryHandler(
           new Date().toISOString(),
       });
     }
+
     const url = new URL(request.url);
     const cursor = parsePageInteger(url.searchParams.get("cursor"), 0, Number.MAX_SAFE_INTEGER);
     const limit = parsePageInteger(url.searchParams.get("limit"), 100, 100);
+
     if (cursor === undefined || limit === undefined)
       return failure(400, "INVALID_PAGINATION", "Invalid cursor or limit");
     const rows = await getCrawlFrontierPage(db, id, cursor, limit);
+
     const items: {
       url: string;
       finalUrl: string | null;
@@ -103,6 +119,7 @@ export function createDiscoveryHandler(
       document?: ScrapeDocument;
       error?: JobError;
     }[] = [];
+
     let byteSize = 0;
     for (const row of rows.slice(0, limit)) {
       const item = {
@@ -118,14 +135,17 @@ export function createDiscoveryHandler(
       items.push(item);
       byteSize += itemBytes;
     }
+
     const hasMore = rows.length > items.length;
     if (hasMore) {
       url.search = "";
       url.searchParams.set("cursor", String(cursor + items.length));
       url.searchParams.set("limit", String(limit));
     }
+
     const currentProgress = await getCrawlProgress(db, id);
     const progress = currentProgress.total ? currentProgress : job.progress;
+
     return Response.json({
       jobId: id,
       type,
