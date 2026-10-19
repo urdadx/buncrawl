@@ -1,4 +1,4 @@
-# buncrawl
+# Buncrawl
 
 Buncrawl is a web data API for AI agents, built with native Bun APIs.
 
@@ -51,14 +51,6 @@ pnpm run dev
 Open [http://localhost:3001](http://localhost:3001) in your browser to see the web application.
 The API is running at [http://localhost:3000](http://localhost:3000).
 
-### Batch scrape results
-
-`POST /v1/batch/scrape` accepts `{ "requests": [{ "url": "https://example.com" }] }` and returns a `jobId`. Poll `GET /v1/batch/scrape/:id` for progress and items. For large batches, results are paginated (up to 100 items or approximately 1 MiB per response). Follow the returned `next` URL until it is absent; use `?limit=20` to request smaller pages. The `cursor` in `next` refers to the original item index, so results can be read while the job is still running.
-
-### Map and crawl jobs
-
-`POST /v1/map` accepts `{ "url": "https://example.com", "maxUrls": 100 }` to discover in-scope, robots-allowed links. `POST /v1/crawl` accepts `{ "url": "https://example.com", "maxPages": 100, "maxDepth": 2 }` and scrapes accepted pages using the same scraper as `/v1/scrape`. Both return a `jobId`. Poll `GET /v1/map/:id` or `GET /v1/crawl/:id` for progress, per-page errors and URL or document results; follow `next` for additional pages. `DELETE` on the same URL requests cancellation. Optional limits include `maxBytes` and `timeoutMs`; crawl also accepts `scrapeOptions` for per-page output settings.
-
 ## Deployment
 
 ### Docker Compose
@@ -96,6 +88,5 @@ buncrawl/
 - `pnpm run db:push`: Push schema changes to database
 - `pnpm run db:generate`: Generate database client/types
 - `pnpm run db:migrate`: Run database migrations
-- `pnpm run db:local`: Start the local SQLite database
 - `pnpm run docker:build`: Build the Docker Compose images
 - `pnpm run docker:up`: Build and start the Docker Compose stack
