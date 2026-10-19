@@ -43,6 +43,15 @@ export class StaleJobLeaseError extends Error {
   }
 }
 
+export class JobQueueFullError extends Error {
+  readonly code = "QUEUE_FULL";
+
+  constructor() {
+    super("Batch queue is full");
+    this.name = "JobQueueFullError";
+  }
+}
+
 export async function enqueueJob(db: Database, input: EnqueueJobInput) {
   const now = input.now ?? new Date();
   const id = input.id ?? createJobId();
@@ -56,36 +65,42 @@ export async function enqueueJob(db: Database, input: EnqueueJobInput) {
     cancelled: 0,
   };
 
-  await executeBatch(db, [
-    db.insert(jobs).values({
-      id,
-      type: input.submission.type,
-      state: "queued",
-      request: input.submission,
-      progress,
-      limits: input.limits,
-      createdAt: now,
-      updatedAt: now,
-    }),
-    db.insert(jobItems).values(
-      requests.map((request, index) => ({
-        id: createJobItemId(),
-        jobId: id,
-        index,
-        state: "queued" as const,
-        request,
+  try {
+    await executeBatch(db, [
+      db.insert(jobs).values({
+        id,
+        type: input.submission.type,
+        state: "queued",
+        request: input.submission,
+        progress,
+        limits: input.limits,
         createdAt: now,
         updatedAt: now,
-      })),
-    ),
-    db.insert(jobEvents).values({
-      jobId: id,
-      sequence: 1,
-      type: "state_changed",
-      payload: { state: "queued" },
-      createdAt: now,
-    }),
-  ]);
+      }),
+      db.insert(jobItems).values(
+        requests.map((request, index) => ({
+          id: createJobItemId(),
+          jobId: id,
+          index,
+          state: "queued" as const,
+          request,
+          createdAt: now,
+          updatedAt: now,
+        })),
+      ),
+      db.insert(jobEvents).values({
+        jobId: id,
+        sequence: 1,
+        type: "state_changed",
+        payload: { state: "queued" },
+        createdAt: now,
+      }),
+    ]);
+  } catch (error) {
+    const cause = error instanceof Error && "cause" in error ? error.cause : error;
+    if (String(cause).includes("BATCH_QUEUE_FULL")) throw new JobQueueFullError();
+    throw error;
+  }
   const job = await getJob(db, id);
   if (!job) throw new Error("Job was not created");
   return { job, items: await getJobItems(db, id) };

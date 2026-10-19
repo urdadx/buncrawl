@@ -10,6 +10,7 @@ import {
   getJobEvents,
   getJobItems,
   heartbeatJobItem,
+  JobQueueFullError,
   migrateDb,
   recoverExpiredJobItems,
   requestJobCancellation,
@@ -67,6 +68,26 @@ describe("job repository", () => {
 
     expect(await getJobItems(db, job.id)).toHaveLength(1);
     expect(await getJobEvents(db, job.id)).toHaveLength(1);
+  });
+
+  test("enforces queue capacity inside the enqueue transaction", async () => {
+    const { db } = await setup();
+    await db.run(`DROP TRIGGER job_items_pending_limit`);
+    await db.run(`CREATE TRIGGER job_items_pending_limit BEFORE INSERT ON job_items
+      WHEN NEW.state IN ('queued', 'running') AND
+        (SELECT count(*) FROM job_items WHERE state IN ('queued', 'running')) >= 2
+      BEGIN SELECT RAISE(ABORT, 'BATCH_QUEUE_FULL'); END`);
+    await expect(
+      enqueueJob(db, {
+        submission: {
+          type: "batch_scrape",
+          requests: [{ url: "https://two.example" }, { url: "https://three.example" }],
+        },
+        limits,
+      }),
+    ).rejects.toBeInstanceOf(JobQueueFullError);
+    const jobs = await db.all<{ count: number }>("SELECT count(*) AS count FROM jobs");
+    expect(Number(jobs[0]?.count)).toBe(1);
   });
 
   test("allows only one worker to claim a single queued item", async () => {

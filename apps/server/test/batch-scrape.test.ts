@@ -71,3 +71,23 @@ test("batch validates input and reports missing jobs", async () => {
     (await handle(new Request("http://localhost"), "job_00000000000000000000000000000000")).status,
   ).toBe(404);
 });
+
+test("reports a concurrent queue-capacity rejection as 429", async () => {
+  const db = createDb({ DATABASE_URL: ":memory:" });
+  await migrateDb(db);
+  const handle = createBatchScrapeHandler(db, async () => {});
+  await db.run("DROP TRIGGER job_items_pending_limit");
+  await db.run(`CREATE TRIGGER job_items_pending_limit BEFORE INSERT ON job_items
+    WHEN NEW.state = 'queued' AND (SELECT count(*) FROM job_items WHERE state = 'queued') >= 1
+    BEGIN SELECT RAISE(ABORT, 'BATCH_QUEUE_FULL'); END`);
+  const response = await handle(
+    new Request("http://localhost/v1/batch/scrape", {
+      method: "POST",
+      body: JSON.stringify({
+        requests: [{ url: "https://one.example" }, { url: "https://two.example" }],
+      }),
+    }),
+  );
+  expect(response.status).toBe(429);
+  expect(await response.json()).toMatchObject({ code: "QUEUE_FULL" });
+});

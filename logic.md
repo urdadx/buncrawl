@@ -71,7 +71,8 @@ buncrawl/
 │   │       ├── index.ts
 │   │       ├── scrape.ts                 # DONE: scrape orchestration
 │   │       └── scrape.test.ts
-│   ├── jobs/                             # TODO: durable asynchronous jobs
+│   ├── jobs/                             # Durable batch worker and artifact persistence
+│   ├── crawl/                            # Crawl URLs, robots, sitemaps, discovery
 │   ├── api/                              # Existing internal tRPC API
 │   ├── db/                               # Existing Drizzle/libSQL package
 │   └── ui/
@@ -321,7 +322,7 @@ Build this work in dependency order. The first vertical slice is a durable `/v1/
 - Keep database polling with backoff as the correctness fallback when Redis is unavailable.
 - Send IDs through Redis, not complete requests, results, or authoritative state.
 
-#### 12.5 First Vertical Slice: `/v1/batch/scrape`
+#### 12.5 First Vertical Slice: `/v1/batch/scrape` -> DONE
 
 - Implement `POST /v1/batch/scrape` to validate URLs and options, persist the job and items, notify workers, and return a job ID.
 - Implement `GET /v1/batch/scrape/:id` to return status, progress, completed items, and stable errors.
@@ -331,7 +332,7 @@ Build this work in dependency order. The first vertical slice is a durable `/v1/
 - Write large outputs and screenshots through the artifact store while retaining small response metadata in SQLite.
 - Test atomic claims, duplicate workers, partial failure, cancellation, stale-lease recovery, process restart, Redis absence, R2 selection, R2-unavailable filesystem fallback, and artifact-path safety.
 
-#### 12.6 Crawl Foundation
+#### 12.6 Crawl Foundation -> DONE
 
 - Add tables for `crawl_frontier` and `crawl_hosts`.
 - Canonicalize HTTP(S) URLs and exclude `mailto:`, `tel:`, fragments, unsupported schemes, and out-of-scope URLs.

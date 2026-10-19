@@ -1,0 +1,5 @@
+{
+  "extends": "@buncrawl/config/tsconfig.base.json",
+  "compilerOptions": { "types": ["bun"] },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

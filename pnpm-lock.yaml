@@ -347,6 +347,34 @@ importers:
         specifier: 'catalog:'
         version: 6.0.3
 
+  packages/crawl:
+    dependencies:
+      '@buncrawl/core':
+        specifier: workspace:*
+        version: link:../core
+      '@buncrawl/db':
+        specifier: workspace:*
+        version: link:../db
+      '@buncrawl/extract':
+        specifier: workspace:*
+        version: link:../extract
+      '@buncrawl/fetcher':
+        specifier: workspace:*
+        version: link:../fetcher
+      '@buncrawl/security':
+        specifier: workspace:*
+        version: link:../security
+    devDependencies:
+      '@buncrawl/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.2
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+
   packages/db:
     dependencies:
       '@buncrawl/contracts':
@@ -430,6 +458,9 @@ importers:
 
   packages/jobs:
     dependencies:
+      '@buncrawl/artifacts':
+        specifier: workspace:*
+        version: link:../artifacts
       '@buncrawl/contracts':
         specifier: workspace:*
         version: link:../contracts

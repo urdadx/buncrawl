@@ -3,6 +3,7 @@ import {
   enqueueJob,
   getJob,
   getJobItems,
+  JobQueueFullError,
   requestJobCancellation,
   type Database,
 } from "@buncrawl/db";
@@ -53,10 +54,17 @@ export function createBatchScrapeHandler(
         return failure(429, "QUEUE_FULL", "Batch queue is full");
       }
 
-      const { job } = await enqueueJob(db, {
-        submission: parsed.output,
-        limits: { maxItems: parsed.output.requests.length, timeoutMs: 120_000 },
-      });
+      let job;
+      try {
+        ({ job } = await enqueueJob(db, {
+          submission: parsed.output,
+          limits: { maxItems: parsed.output.requests.length, timeoutMs: 120_000 },
+        }));
+      } catch (error) {
+        if (error instanceof JobQueueFullError)
+          return failure(429, "QUEUE_FULL", "Batch queue is full");
+        throw error;
+      }
 
       await notify(job.id).catch(() => undefined);
 

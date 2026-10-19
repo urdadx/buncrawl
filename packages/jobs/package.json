@@ -4,6 +4,7 @@
   "exports": { ".": "./src/index.ts" },
   "scripts": { "check-types": "tsc --noEmit", "test": "bun test test" },
   "dependencies": {
+    "@buncrawl/artifacts": "workspace:*",
     "@buncrawl/contracts": "workspace:*",
     "@buncrawl/db": "workspace:*",
     "@buncrawl/scrape": "workspace:*"

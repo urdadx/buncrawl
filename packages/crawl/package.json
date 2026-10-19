@@ -1,0 +1,23 @@
+{
+  "name": "@buncrawl/crawl",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "bun test test"
+  },
+  "dependencies": {
+    "@buncrawl/core": "workspace:*",
+    "@buncrawl/db": "workspace:*",
+    "@buncrawl/extract": "workspace:*",
+    "@buncrawl/fetcher": "workspace:*",
+    "@buncrawl/security": "workspace:*"
+  },
+  "devDependencies": {
+    "@buncrawl/config": "workspace:*",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

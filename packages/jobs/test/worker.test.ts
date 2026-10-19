@@ -1,4 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   createDb,
   enqueueJob,
@@ -176,3 +179,48 @@ test("recovers expired work left by a previous process", async () => {
   await until(async () => (await getJob(db, job.id))?.state === "completed");
   expect((await getJobItems(db, job.id))[0]?.attempts).toBe(2);
 });
+
+test("opens a new database connection after restart and completes without Redis", async () => {
+  const root = await mkdtemp(join(tmpdir(), "buncrawl-restart-"));
+  try {
+    const url = `file:${join(root, "jobs.db")}`;
+    const original = createDb({ DATABASE_URL: url });
+    await migrateDb(original);
+    const { job } = await enqueueJob(original, {
+      submission: { type: "batch_scrape", requests: [{ url: "https://one.example" }] },
+      limits: { maxItems: 1, timeoutMs: 5000 },
+    });
+    const { claimJobItem } = await import("@buncrawl/db");
+    await claimJobItem(original, {
+      workerId: "old-process",
+      leaseMs: 100,
+      now: new Date(Date.now() - 1000),
+    });
+    const restarted = createDb({ DATABASE_URL: url });
+    const worker = new JobWorker({
+      db: restarted,
+      dispatch,
+      pollMs: 20,
+      scrapeItem: async (request) => ({
+        success: true,
+        data: {
+          metadata: {
+            sourceURL: request.url,
+            finalURL: request.url,
+            statusCode: 200,
+            renderer: "fetch",
+          },
+        },
+      }),
+    });
+    workers.push(worker);
+    await worker.start();
+    await until(async () => (await getJob(restarted, job.id))?.state === "completed");
+    expect((await getJobItems(restarted, job.id))[0]).toMatchObject({
+      attempts: 2,
+      state: "completed",
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 15_000);

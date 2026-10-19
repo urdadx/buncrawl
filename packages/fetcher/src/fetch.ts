@@ -35,6 +35,7 @@ export interface FetchPageOptions {
   maxResponseBytes?: number;
   resolver?: DnsResolver;
   fetchImpl?: FetchImplementation;
+  beforeRedirect?: (url: URL) => Promise<void>;
 }
 
 export interface FetchPageResult {
@@ -109,6 +110,13 @@ export async function fetchPage(
         resolver: options.resolver,
         signal: options.deadline.signal,
       });
+
+      try {
+        await options.beforeRedirect?.(nextUrl);
+      } catch (error) {
+        await response.body?.cancel();
+        throw error;
+      }
 
       // Cancel the response body to free up resources and prevent further processing.
       await response.body?.cancel();

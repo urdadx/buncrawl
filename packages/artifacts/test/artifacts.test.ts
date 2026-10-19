@@ -3,7 +3,12 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createArtifactKey, FilesystemArtifactStore, validateArtifactKey } from "../src";
+import {
+  createArtifactKey,
+  FilesystemArtifactStore,
+  selectArtifactStore,
+  validateArtifactKey,
+} from "../src";
 
 const roots: string[] = [];
 afterEach(async () =>
@@ -48,4 +53,43 @@ describe("filesystem artifact store", () => {
     expect(await store.get(key)).toEqual(data);
     expect(new Uint8Array(await readFile(join(root, key)))).toEqual(data);
   });
+});
+
+test("selects healthy R2, falls back when unavailable, and never changes backends after selection", async () => {
+  const root = await mkdtemp(join(tmpdir(), "buncrawl-artifacts-"));
+  roots.push(root);
+  const config = {
+    filesystemRoot: root,
+    r2: {
+      endpoint: "https://r2.example",
+      bucket: "bucket",
+      accessKeyId: "key",
+      secretAccessKey: "secret",
+    },
+  };
+  const r2 = {
+    backend: "r2" as const,
+    check: async () => {},
+    put: async () => {
+      throw new Error("R2 unavailable");
+    },
+    get: async () => new Uint8Array(),
+    delete: async () => {},
+  };
+  const selected = await selectArtifactStore(config, () => r2);
+  expect(selected.backend).toBe("r2");
+  await expect(
+    selected.put({
+      key: createArtifactKey("md"),
+      data: new Uint8Array([1]),
+      contentType: "text/markdown",
+    }),
+  ).rejects.toThrow("R2 unavailable");
+  const fallback = await selectArtifactStore(config, () => ({
+    ...r2,
+    check: async () => {
+      throw new Error("probe failed");
+    },
+  }));
+  expect(fallback.backend).toBe("filesystem");
 });

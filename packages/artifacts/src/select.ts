@@ -9,13 +9,18 @@ export interface ArtifactStoreConfig {
 
 export async function selectArtifactStore(
   config: ArtifactStoreConfig = {},
+  createR2: (
+    options: R2ArtifactStoreOptions,
+  ) => Pick<ArtifactStore, "backend" | "put" | "get" | "delete"> & { check(): Promise<void> } = (
+    options,
+  ) => new R2ArtifactStore(options),
 ): Promise<ArtifactStore> {
   const filesystem = new FilesystemArtifactStore(config.filesystemRoot);
   await filesystem.initialize();
 
   if (!isCompleteR2Config(config.r2)) return filesystem;
 
-  const r2 = new R2ArtifactStore(config.r2);
+  const r2 = createR2(config.r2);
   try {
     await r2.check();
     return r2;
