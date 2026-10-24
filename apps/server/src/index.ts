@@ -1,12 +1,14 @@
 import { appRouter } from "@buncrawl/api/routers/index";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
-import { DiscoveryWorker, JobWorker } from "@buncrawl/jobs";
+import { DiscoveryWorker, JobWorker, WebhookWorker } from "@buncrawl/jobs";
+import { pruneJobEvents } from "@buncrawl/db";
 
 import { createContext } from "./context";
 import { ENV } from "./env.server";
 import { handleScrape } from "./routes/v1/scrape";
 import { createBatchScrapeHandler } from "./routes/v1/batch-scrape";
 import { createDiscoveryHandler } from "./routes/v1/discovery";
+import { createEventsHandler } from "./routes/v1/events";
 import { SERVER_IDLE_TIMEOUT_SECONDS } from "./server-config";
 import { db, persistJobDocument, servicesReady } from "./services";
 
@@ -66,14 +68,22 @@ async function main(): Promise<void> {
   const batchScrape = createBatchScrapeHandler(db);
   const map = createDiscoveryHandler(db, "map");
   const crawl = createDiscoveryHandler(db, "crawl");
+  const events = createEventsHandler(db);
   const worker = new JobWorker({ db, persistDocument: persistJobDocument });
   await worker.start();
   const discoveryWorker = new DiscoveryWorker({ db, persistDocument: persistJobDocument });
   await discoveryWorker.start();
+  const webhooks = new WebhookWorker(db);
+  webhooks.start();
+  await pruneJobEvents(db);
+  const retention = setInterval(() => void pruneJobEvents(db).catch(console.error), 60 * 60 * 1000);
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
-      void Promise.all([worker.stop(), discoveryWorker.stop()]).finally(() => process.exit(0));
+      clearInterval(retention);
+      void Promise.all([worker.stop(), discoveryWorker.stop(), webhooks.stop()]).finally(() =>
+        process.exit(0),
+      );
     });
   }
 
@@ -110,12 +120,21 @@ async function main(): Promise<void> {
         handle(request, () => preflight(request) ?? batchScrape(request)),
       "/v1/batch/scrape/:id": (request) =>
         handle(request, () => preflight(request) ?? batchScrape(request, request.params.id)),
+      "/v1/batch/scrape/:id/events": (request) =>
+        handle(
+          request,
+          () => preflight(request) ?? events(request, request.params.id, "batch_scrape"),
+        ),
       "/v1/map": (request) => handle(request, () => preflight(request) ?? map(request)),
       "/v1/map/:id": (request) =>
         handle(request, () => preflight(request) ?? map(request, request.params.id)),
+      "/v1/map/:id/events": (request) =>
+        handle(request, () => preflight(request) ?? events(request, request.params.id, "map")),
       "/v1/crawl": (request) => handle(request, () => preflight(request) ?? crawl(request)),
       "/v1/crawl/:id": (request) =>
         handle(request, () => preflight(request) ?? crawl(request, request.params.id)),
+      "/v1/crawl/:id/events": (request) =>
+        handle(request, () => preflight(request) ?? events(request, request.params.id, "crawl")),
     },
     fetch(request) {
       return handle(request, () => {

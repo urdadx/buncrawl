@@ -94,6 +94,35 @@ export async function migrateDb(db: Database): Promise<void> {
     sql`CREATE INDEX IF NOT EXISTS job_events_created_at_idx ON job_events (created_at)`,
   );
   await db.run(sql`
+    CREATE TABLE IF NOT EXISTS webhook_deliveries (
+      job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+      sequence INTEGER NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'delivered', 'failed')),
+      next_attempt_at INTEGER NOT NULL,
+      lease_until INTEGER NOT NULL DEFAULT 0,
+      delivered_at INTEGER,
+      last_error TEXT,
+      PRIMARY KEY (job_id, sequence)
+    )
+  `);
+  await db.run(
+    sql`CREATE INDEX IF NOT EXISTS webhook_deliveries_due_idx ON webhook_deliveries (state, next_attempt_at)`,
+  );
+  // Replace earlier trigger definitions when an existing installation upgrades.
+  await db.run(sql`DROP TRIGGER IF EXISTS job_events_webhook`);
+  await db.run(sql`
+    CREATE TRIGGER IF NOT EXISTS job_events_webhook AFTER INSERT ON job_events
+    WHEN json_extract((SELECT request_json FROM jobs WHERE id = NEW.job_id), '$.webhook.url') IS NOT NULL
+      AND (json_type((SELECT request_json FROM jobs WHERE id = NEW.job_id), '$.webhook.events') IS NULL
+        OR EXISTS (SELECT 1 FROM json_each((SELECT request_json FROM jobs WHERE id = NEW.job_id), '$.webhook.events')
+          WHERE value = NEW.type))
+    BEGIN
+      INSERT INTO webhook_deliveries (job_id, sequence, next_attempt_at)
+      VALUES (NEW.job_id, NEW.sequence, NEW.created_at);
+    END
+  `);
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS crawl_hosts (
       job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
       origin TEXT NOT NULL,

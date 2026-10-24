@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import type { JobError, JobProgress, ScrapeDocument } from "@buncrawl/contracts";
 
 import type { Database } from "./index";
+import { appendJobEvent } from "./jobs";
 import { crawlFrontier, crawlHosts, jobs } from "./schema";
 
 export interface CrawlLimits {
@@ -285,10 +286,17 @@ export async function getCrawlProgress(db: Database, jobId: string): Promise<Job
 
 export async function syncCrawlProgress(db: Database, jobId: string): Promise<JobProgress> {
   const progress = await getCrawlProgress(db, jobId);
+  const now = new Date();
+  const [previous] = await db
+    .select()
+    .from(jobs)
+    .where(sql`${jobs.id} = ${jobId}`);
   await db
     .update(jobs)
-    .set({ progress, updatedAt: new Date() })
+    .set({ progress, updatedAt: now })
     .where(sql`${jobs.id} = ${jobId}`);
+  if (previous && JSON.stringify(previous.progress) !== JSON.stringify(progress))
+    await appendJobEvent(db, jobId, "progress", { progress }, now);
   return progress;
 }
 

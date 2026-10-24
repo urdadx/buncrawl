@@ -26,6 +26,18 @@ const httpUrl = v.pipe(
   v.regex(/^https?:\/\//i, "URL must use HTTP or HTTPS"),
 );
 
+const webhookSchema = v.strictObject({
+  url: v.pipe(v.string(), v.url(), v.regex(/^https:\/\//i, "Webhook must use HTTPS")),
+  secret: v.pipe(v.string(), v.minLength(16), v.maxLength(256)),
+  events: v.optional(
+    v.pipe(
+      v.array(v.picklist(["state_changed", "progress", "item_completed", "error"])),
+      v.minLength(1),
+      v.maxLength(4),
+    ),
+  ),
+});
+
 export const jobIdSchema = v.pipe(v.string(), v.regex(/^job_[0-9a-f]{32}$/, "Invalid job ID"));
 export const jobItemIdSchema = v.pipe(
   v.string(),
@@ -106,6 +118,7 @@ export const jobLimitsSchema = v.strictObject({
 
 const batchScrapeSubmissionSchema = v.strictObject({
   type: v.literal("batch_scrape"),
+  webhook: v.optional(webhookSchema),
   requests: v.pipe(
     v.array(scrapeRequestSchema),
     v.minLength(1, "At least one scrape request is required"),
@@ -115,6 +128,7 @@ const batchScrapeSubmissionSchema = v.strictObject({
 
 const mapSubmissionSchema = v.strictObject({
   type: v.literal("map"),
+  webhook: v.optional(webhookSchema),
   url: httpUrl,
   maxUrls: v.optional(positiveInteger(MAX_DISCOVERED_URLS, "maxUrls")),
   maxDepth: v.optional(
@@ -131,6 +145,7 @@ const mapSubmissionSchema = v.strictObject({
 
 const crawlSubmissionSchema = v.strictObject({
   type: v.literal("crawl"),
+  webhook: v.optional(webhookSchema),
   url: httpUrl,
   maxPages: v.optional(positiveInteger(MAX_DISCOVERED_URLS, "maxPages")),
   maxDepth: v.optional(

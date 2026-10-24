@@ -105,6 +105,30 @@ export const jobEvents = sqliteTable(
   ],
 );
 
+export const webhookDeliveries = sqliteTable(
+  "webhook_deliveries",
+  {
+    jobId: text("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    sequence: integer().notNull(),
+    attempts: integer().notNull().default(0),
+    state: text().$type<"pending" | "delivered" | "failed">().notNull().default("pending"),
+    nextAttemptAt: integer("next_attempt_at", { mode: "timestamp_ms" }).notNull(),
+    leaseUntil: integer("lease_until", { mode: "timestamp_ms" }).notNull().default(new Date(0)),
+    deliveredAt: integer("delivered_at", { mode: "timestamp_ms" }),
+    lastError: text("last_error"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.jobId, table.sequence] }),
+    check(
+      "webhook_deliveries_state_check",
+      sql`${table.state} IN ('pending', 'delivered', 'failed')`,
+    ),
+    index("webhook_deliveries_due_idx").on(table.state, table.nextAttemptAt),
+  ],
+);
+
 export type JobRecord = typeof jobs.$inferSelect;
 export type NewJobRecord = typeof jobs.$inferInsert;
 export type JobItemRecord = typeof jobItems.$inferSelect;

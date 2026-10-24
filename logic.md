@@ -351,13 +351,31 @@ Build this work in dependency order. The first vertical slice is a durable `/v1/
 - Expose submit, status, result, and cancellation routes using the canonical job contracts.
 - Test redirects, duplicate canonical URLs, cyclic links, cross-origin scope, robots rules, sitemap indexes, host limits, cancellation, and restart recovery.
 
-#### 12.8 Progress Events, SSE, and Webhooks
+#### 12.8 Progress Events, SSE, and Webhooks -> DONE
 
 - Use `job_events` as the durable source for progress and state changes.
 - Add SSE with snapshots, incremental events, heartbeats, sequence IDs, and `Last-Event-ID` resumption.
 - Add signed webhooks with bounded retries and delivery records.
 - Never make job completion depend on an SSE client or successful webhook delivery.
 - Add cancellation and event-retention policies.
+
+SSE: `GET /v1/batch/scrape/:id/events`, `/v1/map/:id/events`, or `/v1/crawl/:id/events`.
+New connections receive a snapshot, then ordered persisted events. Resume with `Last-Event-ID`
+(or `?after=<sequence>`); event IDs are per-job sequence numbers. Streams close after the
+terminal event; heartbeats are SSE comments. Client disconnects stop only the stream, not the job.
+
+Optional submission field: `"webhook": { "url": "https://...", "secret": "..." }`
+(secret minimum 16 characters). An optional `events` array selects `state_changed`,
+`progress`, `item_completed`, and/or `error` events; omitting it delivers all events.
+Each selected durable event is delivered as JSON with
+`X-Buncrawl-Delivery: <jobId>:<sequence>`, `X-Buncrawl-Timestamp` (Unix milliseconds), and
+`X-Buncrawl-Signature: sha256=<hex HMAC-SHA256(secret, timestamp + "." + raw body)>`.
+Verify the signature against the unmodified body and deduplicate by delivery ID. URLs must
+use HTTPS; delivery pins the validated public IP for TLS while preserving the hostname.
+Delivery retries at most five times with exponential backoff and records status/attempts in
+`webhook_deliveries`. Cancellation emits state events and does not cancel already queued
+webhook deliveries. Terminal job events are retained seven days, delivery records fourteen
+days; pending deliveries keep their events until resolved.
 
 #### 12.9 Firecrawl v2 Compatibility
 

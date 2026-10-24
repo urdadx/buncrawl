@@ -124,12 +124,35 @@ export async function getJobItemsPage(db: Database, jobId: string, cursor: numbe
     .limit(limit + 1);
 }
 
-export async function getJobEvents(db: Database, jobId: string, afterSequence = 0) {
+export async function getJobEvents(db: Database, jobId: string, afterSequence = 0, limit = 100) {
   return db
     .select()
     .from(jobEvents)
     .where(sql`${jobEvents.jobId} = ${jobId} AND ${jobEvents.sequence} > ${afterSequence}`)
-    .orderBy(jobEvents.sequence);
+    .orderBy(jobEvents.sequence)
+    .limit(limit);
+}
+
+export async function latestJobEventSequence(db: Database, jobId: string): Promise<number> {
+  const [row] = await queryRows<{ sequence: number }>(
+    db,
+    sql`SELECT COALESCE(MAX(sequence), 0) AS sequence FROM job_events WHERE job_id = ${jobId}`,
+  );
+  return Number(row?.sequence ?? 0);
+}
+
+/** Retain events for seven days after a job finishes; delivery records for fourteen. */
+export async function pruneJobEvents(db: Database, now = new Date()): Promise<void> {
+  const eventsBefore = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+  const deliveriesBefore = now.getTime() - 14 * 24 * 60 * 60 * 1000;
+  await db.run(sql`DELETE FROM webhook_deliveries WHERE state IN ('delivered', 'failed')
+    AND EXISTS (SELECT 1 FROM jobs WHERE id = webhook_deliveries.job_id
+      AND state IN ('completed', 'failed', 'cancelled') AND finished_at < ${deliveriesBefore})`);
+  await db.run(sql`DELETE FROM job_events WHERE EXISTS (SELECT 1 FROM jobs
+    WHERE id = job_events.job_id AND state IN ('completed', 'failed', 'cancelled')
+      AND finished_at < ${eventsBefore})
+    AND NOT EXISTS (SELECT 1 FROM webhook_deliveries WHERE job_id = job_events.job_id
+      AND sequence = job_events.sequence AND state = 'pending')`);
 }
 
 export async function claimJobItem(
@@ -282,7 +305,8 @@ export async function requestJobCancellation(db: Database, jobId: string, now = 
     .where(and(eq(jobs.id, jobId), inArray(jobs.state, ["queued", "running", "cancelling"])))
     .returning();
   await refreshJobProgress(db, jobId, now);
-  if (job) await appendJobEvent(db, jobId, "state_changed", { state }, now);
+  if (job && existing.state !== state)
+    await appendJobEvent(db, jobId, "state_changed", { state }, now);
   return job;
 }
 
@@ -408,7 +432,11 @@ async function refreshJobProgress(db: Database, jobId: string, now: Date): Promi
   let finishedAt = job.finishedAt;
   if (progress.queued === 0 && progress.running === 0) {
     state =
-      job.state === "failed" ? "failed" : job.state === "cancelling" ? "cancelled" : "completed";
+      job.state === "failed"
+        ? "failed"
+        : job.state === "cancelling" || job.state === "cancelled"
+          ? "cancelled"
+          : "completed";
     finishedAt ??= now;
   }
   await db
@@ -440,7 +468,7 @@ async function transitionJob(
   return job;
 }
 
-async function appendJobEvent(
+export async function appendJobEvent(
   db: Database,
   jobId: string,
   type: JobEvent["event"],
