@@ -29,6 +29,19 @@ export interface CrawlLease {
   byteBudget: number;
 }
 
+// Host rows are only ever created once per job and origin, so remember which exist in this process.
+const scheduledHosts = new WeakMap<Database, Set<string>>();
+
+/** scheduleCrawlHost without limits, skipping the write once this process has created the row. */
+async function ensureCrawlHost(db: Database, jobId: string, origin: string): Promise<void> {
+  const key = `${jobId}\n${origin}`;
+  let known = scheduledHosts.get(db);
+  if (known?.has(key)) return;
+  await scheduleCrawlHost(db, jobId, origin);
+  if (!known) scheduledHosts.set(db, (known = new Set()));
+  known.add(key);
+}
+
 export async function scheduleCrawlHost(
   db: Database,
   jobId: string,
@@ -55,6 +68,9 @@ export async function scheduleCrawlHost(
       max_concurrency = ${maxConcurrency}, min_delay_ms = max(min_delay_ms, ${minDelayMs})
       WHERE job_id = ${jobId} AND origin = ${origin}`);
 }
+
+/** Largest single page a crawl fetches; each claim reserves this much of the crawl's byte budget. */
+export const MAX_CRAWL_PAGE_BYTES = 10 * 1024 * 1024;
 
 /** Each conditional INSERT is atomic: duplicate URLs and page/byte/time limits are checked at insertion. */
 export async function enqueueCrawlUrl(
@@ -87,17 +103,20 @@ export async function enqueueCrawlUrl(
     throw new TypeError("Frontier URLs must be canonical HTTP(S) URLs matching their host");
   }
 
-  await scheduleCrawlHost(db, jobId, entry.origin);
+  await ensureCrawlHost(db, jobId, entry.origin);
   const twin = siteTwinUrl(entry.url);
 
   // A page is already known if it, or its www/bare-domain twin, is queued or was reached by a redirect.
+  // Cheap indexed lookups come first: most discovered links are already known, and SQLite stops at the
+  // first false condition, skipping the frontier-wide count and byte sum.
   const result = await db.run(sql`
     INSERT OR IGNORE INTO crawl_frontier (job_id, url, origin, depth, state, created_at, updated_at)
     SELECT ${jobId}, ${entry.url}, ${entry.origin}, ${entry.depth}, 'queued', ${now.getTime()}, ${now.getTime()}
-    WHERE EXISTS (SELECT 1 FROM jobs WHERE id = ${jobId} AND state IN ('queued', 'running')
-      AND created_at + ${limits.maxElapsedMs} > ${now.getTime()})
+    WHERE NOT EXISTS (SELECT 1 FROM crawl_frontier WHERE job_id = ${jobId} AND url IN (${entry.url}, ${twin}))
       AND NOT EXISTS (SELECT 1 FROM crawl_frontier WHERE job_id = ${jobId}
-        AND (url = ${twin} OR final_url IN (${entry.url}, ${twin})))
+        AND final_url IN (${entry.url}, ${twin}))
+      AND EXISTS (SELECT 1 FROM jobs WHERE id = ${jobId} AND state IN ('queued', 'running')
+        AND created_at + ${limits.maxElapsedMs} > ${now.getTime()})
       AND (SELECT count(*) FROM crawl_frontier WHERE job_id = ${jobId}) < ${limits.maxPages}
       AND (SELECT coalesce(sum(byte_size + reserved_bytes), 0) FROM crawl_frontier WHERE job_id = ${jobId}) < ${limits.maxBytes}
   `);
@@ -123,7 +142,7 @@ export async function claimCrawlUrl(
       leaseOwner: workerId,
       leaseExpiresAt: new Date(now.getTime() + leaseMs),
       leaseVersion: sql`${crawlFrontier.leaseVersion} + 1`,
-      reservedBytes: sql`min(10485760, ${limits.maxBytes} -
+      reservedBytes: sql`min(${MAX_CRAWL_PAGE_BYTES}, ${limits.maxBytes} -
       (SELECT coalesce(sum(byte_size + reserved_bytes), 0) FROM crawl_frontier WHERE job_id = ${jobId}))`,
       attempts: sql`${crawlFrontier.attempts} + 1`,
       updatedAt: now,

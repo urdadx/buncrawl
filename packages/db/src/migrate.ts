@@ -175,6 +175,9 @@ export async function migrateDb(db: Database): Promise<void> {
   await db.run(
     sql`CREATE INDEX IF NOT EXISTS crawl_frontier_host_idx ON crawl_frontier (job_id, origin, state)`,
   );
+  await db.run(
+    sql`CREATE INDEX IF NOT EXISTS crawl_frontier_final_url_idx ON crawl_frontier (job_id, final_url)`,
+  );
   await db.run(sql`
     CREATE TRIGGER IF NOT EXISTS crawl_frontier_started AFTER UPDATE OF state ON crawl_frontier
     WHEN OLD.state != 'running' AND NEW.state = 'running'

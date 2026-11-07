@@ -1,6 +1,8 @@
 import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 
+import { resolveUrl } from "./url";
+
 const ALWAYS_REMOVE = "script, style, noscript, iframe, canvas, template";
 const MAIN_CONTENT_REMOVE = [
   "body > header",
@@ -132,8 +134,6 @@ export function cleanHtml(html: string, options: CleanHtmlOptions): string {
   const cleaned = rewriter.transform(html);
   return options.onlyMainContent ? selectMainContent(cleaned) : cleaned;
 }
-
-// rewrites the URL attribute of an HTML element to be absolute based on the provided base URL. If the attribute value is a relative URL, it will be converted to an absolute URL using the base URL. If the attribute value is already an absolute URL or a data URI, it will remain unchanged. Invalid URLs are left untouched.
 
 function rewriteUrlAttribute(
   element: HTMLRewriterTypes.Element,
@@ -291,12 +291,4 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => {
     return `&#${character.charCodeAt(0)};`;
   });
-}
-
-function resolveUrl(value: string, baseUrl: string): string | undefined {
-  try {
-    return new URL(value, baseUrl).href;
-  } catch {
-    return undefined;
-  }
 }

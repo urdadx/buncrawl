@@ -1,4 +1,9 @@
-import type { ScrapeDocument, ScrapeRequest, ScrapeResponse } from "@buncrawl/contracts";
+import {
+  DEFAULT_SCRAPE_TIMEOUT_MS,
+  type ScrapeDocument,
+  type ScrapeRequest,
+  type ScrapeResponse,
+} from "@buncrawl/contracts";
 import {
   cancelRunningJobItem,
   claimJobItem,
@@ -143,7 +148,10 @@ export class JobWorker {
 
     const job = await getJob(this.db, item.jobId);
     const request = item.request as ScrapeRequest;
-    const timeout = Math.min(request.timeout ?? 30_000, job?.limits.timeoutMs ?? 30_000);
+    const timeout = Math.min(
+      request.timeout ?? DEFAULT_SCRAPE_TIMEOUT_MS,
+      job?.limits.timeoutMs ?? DEFAULT_SCRAPE_TIMEOUT_MS,
+    );
     const timer = setTimeout(() => controller.abort(), timeout);
 
     let checking = false;

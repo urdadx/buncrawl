@@ -99,9 +99,7 @@ export class LightpandaRenderer implements Renderer {
         `Lightpanda executable not found: ${this.executable}`,
       );
     }
-    if (request.deadline.signal.aborted || request.deadline.expired) {
-      throw request.deadline.signal.reason ?? new Error("Render deadline expired");
-    }
+    request.deadline.throwIfStopped();
     if (
       request.screenshot &&
       (request.viewport ||

@@ -24,7 +24,8 @@
     "env:generate": "varlock codegen --path ./apps/web/ && varlock codegen --path ./apps/server/ && varlock codegen --path ./packages/db/",
     "postinstall": "varlock codegen --path ./apps/web/ && varlock codegen --path ./apps/server/ && varlock codegen --path ./packages/db/",
     "check": "oxlint && oxfmt --write",
-    "bench:scrape": "bun packages/scrape/bench/scrape.bench.ts"
+    "bench:scrape": "bun packages/scrape/bench/scrape.bench.ts",
+    "bench:crawl": "bun packages/jobs/bench/crawl.bench.ts"
   },
   "dependencies": {
     "valibot": "catalog:"

@@ -187,7 +187,6 @@ async function readBodyCapped(response: Response, maxBytes: number): Promise<Uin
   const body = new Uint8Array(totalBytes);
   let offset = 0;
 
-  // this loop is used to copy each chunk of data into the final Uint8Array `body`. Each chunk is a Uint8Array itself, and we need to place them sequentially in the `body` array. The `offset` variable keeps track of where to place the next chunk in the `body` array. This approach ensures that all chunks are concatenated correctly into a single contiguous array.
   for (const chunk of chunks) {
     body.set(chunk, offset);
     offset += chunk.byteLength;
@@ -195,8 +194,7 @@ async function readBodyCapped(response: Response, maxBytes: number): Promise<Uin
   return body;
 }
 
-// decodes the raw bytes of a response body into a string, using the specified content type to determine the character encoding.
-// example: if the content type is "text/html; charset=ISO-8859-1", it will use the ISO-8859-1 encoding to decode the bytes into a string. If no charset is specified, it defaults to UTF-8.
+// Uses the Content-Type charset (or a <meta charset>), defaulting to UTF-8.
 function decodeBody(bytes: Uint8Array, contentType?: string): { body: string; charset?: string } {
   const headerCharset = contentType?.match(/charset\s*=\s*["']?([^;"'\s]+)/i)?.[1];
   const utf8Preview = new TextDecoder().decode(bytes.subarray(0, 2048));

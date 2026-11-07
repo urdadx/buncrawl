@@ -1,9 +1,10 @@
-import type {
-  JobError,
-  JobSubmission,
-  ScrapeDocument,
-  ScrapeRequest,
-  ScrapeResponse,
+import {
+  DEFAULT_SCRAPE_TIMEOUT_MS,
+  type JobError,
+  type JobSubmission,
+  type ScrapeDocument,
+  type ScrapeRequest,
+  type ScrapeResponse,
 } from "@buncrawl/contracts";
 import { Deadline } from "@buncrawl/core";
 import {
@@ -300,7 +301,15 @@ export class DiscoveryWorker {
       await syncCrawlProgress(this.options.db, item.jobId);
       await Promise.all(
         Array.from({ length: this.pageConcurrency }, () =>
-          this.processPages(item.jobId, request, scope, limits, userAgent, controller),
+          this.processPages(
+            item.jobId,
+            job.createdAt,
+            request,
+            scope,
+            limits,
+            userAgent,
+            controller,
+          ),
         ),
       );
       const current = await getJob(this.options.db, item.jobId);
@@ -364,6 +373,7 @@ export class DiscoveryWorker {
 
   private async processPages(
     jobId: string,
+    jobCreatedAt: Date,
     request: DiscoverySubmission,
     scope: CrawlScope,
     limits: CrawlLimits,
@@ -388,12 +398,22 @@ export class DiscoveryWorker {
         await Bun.sleep(this.pollMs);
         continue;
       }
-      await this.processPage(jobId, request, scope, limits, userAgent, lease, controller);
+      await this.processPage(
+        jobId,
+        jobCreatedAt,
+        request,
+        scope,
+        limits,
+        userAgent,
+        lease,
+        controller,
+      );
     }
   }
 
   private async processPage(
     jobId: string,
+    jobCreatedAt: Date,
     request: DiscoverySubmission,
     scope: CrawlScope,
     limits: CrawlLimits,
@@ -403,12 +423,8 @@ export class DiscoveryWorker {
   ): Promise<void> {
     const deadline = new Deadline(
       Math.min(
-        30_000,
-        Math.max(
-          1,
-          limits.maxElapsedMs -
-            (Date.now() - (await getJob(this.options.db, jobId))!.createdAt.getTime()),
-        ),
+        DEFAULT_SCRAPE_TIMEOUT_MS,
+        Math.max(1, limits.maxElapsedMs - (Date.now() - jobCreatedAt.getTime())),
       ),
       controller.signal,
     );
@@ -442,7 +458,10 @@ export class DiscoveryWorker {
           url: lease.url,
           timeout: Math.max(
             1,
-            Math.min(options?.timeout ?? 30_000, Math.ceil(deadline.remainingMs)),
+            Math.min(
+              options?.timeout ?? DEFAULT_SCRAPE_TIMEOUT_MS,
+              Math.ceil(deadline.remainingMs),
+            ),
           ),
         };
         const response = this.options.scrapeItem

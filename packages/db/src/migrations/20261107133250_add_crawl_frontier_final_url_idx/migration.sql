@@ -1,0 +1,1 @@
+CREATE INDEX `crawl_frontier_final_url_idx` ON `crawl_frontier` (`job_id`,`final_url`);

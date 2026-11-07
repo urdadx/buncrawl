@@ -30,7 +30,7 @@ export interface BrowserNetworkGuard {
   close(): void;
 }
 
-// installBrowserNetworkGuard sets up a network guard for a browser view using the Chrome DevTools Protocol (CDP). It intercepts network requests and checks if they are safe to proceed based on the provided resolver and DNS timeout. If a request is blocked, it fails the request with a BlockedByClient error. The function returns an object with methods to wait for all requests to settle, throw an error if any request was blocked, and close the guard by removing the event listener.
+// Lets each browser request through only after its URL and DNS answers pass SSRF validation.
 export async function installBrowserNetworkGuard(
   view: CdpView,
   signal: AbortSignal,
@@ -43,14 +43,13 @@ export async function installBrowserNetworkGuard(
   let commands = Promise.resolve<unknown>(undefined);
   const validate = createConcurrencyLimiter(options.maxConcurrentValidations ?? 8);
 
-  // command queues up a CDP command to be sent to the browser view. It ensures that commands are sent in order and that any errors are caught and ignored, so that subsequent commands can still be sent. It returns a promise that resolves with the result of the command.
+  // Commands are serialized; a failed one must not block those queued after it.
   const command = (method: string, params?: Record<string, unknown>) => {
     const next = commands.then(() => view.cdp(method, params));
     commands = next.catch(() => undefined);
     return next;
   };
 
-  // listener handles the Fetch.requestPaused event from the browser view. It checks if the request is a local document URL or if it is safe to resolve the URL using the provided resolver (dns, ip etc). If the request is blocked, it fails the request with a BlockedByClient error. Otherwise, it continues the request. It ensures that requests are processed in order and that any errors are caught and stored in the blocked variable.
   const listener = (event: CdpEvent) => {
     const paused = parsePausedRequest(event.data);
     if (!paused) return;
@@ -134,7 +133,7 @@ async function waitUpTo(work: Promise<unknown>, timeoutMs: number): Promise<void
   }
 }
 
-// this is a simple concurrency limiter that allows a limited number of tasks to run concurrently. It maintains a count of active tasks and a queue of waiting tasks. When the number of active tasks reaches the limit, new tasks are added to the waiting queue and will only be executed when an active task completes. This ensures that no more than the specified limit of tasks are running at any given time.
+// Bounds how many DNS validations run at once.
 function createConcurrencyLimiter(limit: number) {
   if (!Number.isInteger(limit) || limit < 1) {
     throw new TypeError("maxConcurrentValidations must be a positive integer");

@@ -1,5 +1,8 @@
 import * as v from "valibot";
 
+/** Applies when a scrape request sets no `timeout`. */
+export const DEFAULT_SCRAPE_TIMEOUT_MS = 30_000;
+
 /** Cached scrape results are kept, and may be requested, for at most 30 days. */
 export const MAX_CACHE_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -84,6 +87,11 @@ export type ScrapeRequest = v.InferOutput<typeof scrapeRequestSchema>;
 
 function formatKey(format: v.InferInput<typeof scrapeFormatSchema>): string {
   return typeof format === "string" ? format : "screenshots";
+}
+
+/** True for the "screenshots" format and for screenshot option objects. */
+export function isScreenshotFormat(format: ScrapeFormat): boolean {
+  return format === "screenshots" || typeof format === "object";
 }
 
 export const scrapeDocumentSchema = v.strictObject({

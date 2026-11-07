@@ -1,4 +1,4 @@
-import type { ScrapeDocument, ScrapeFormat, ScrapeRequest } from "@buncrawl/contracts";
+import { isScreenshotFormat, type ScrapeDocument, type ScrapeRequest } from "@buncrawl/contracts";
 
 export interface ScrapeCache {
   get(
@@ -26,8 +26,4 @@ export function scrapeCacheKey(request: ScrapeRequest): string | undefined {
     waitForMs: request.waitForMs ?? 0,
   });
   return new Bun.CryptoHasher("sha256").update(identity).digest("hex");
-}
-
-function isScreenshotFormat(format: ScrapeFormat): boolean {
-  return format === "screenshots" || typeof format === "object";
 }

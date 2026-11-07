@@ -30,9 +30,19 @@ export class Deadline {
   }
 
   throwIfExpired(): void {
-    if (this.expired) {
-      throw new Error("Deadline expired");
-    }
+    if (this.expired) throw new DeadlineExceededError(this.requestedMs);
+  }
+
+  /** Why work under this deadline must stop (cancellation or expiry), or undefined to continue. */
+  stopReason(): unknown {
+    if (this.signal.aborted)
+      return this.signal.reason ?? new DeadlineExceededError(this.requestedMs);
+    if (this.expired) return new DeadlineExceededError(this.requestedMs);
+  }
+
+  throwIfStopped(): void {
+    const reason = this.stopReason();
+    if (reason !== undefined) throw reason;
   }
 
   clamp(timeoutMs: number): number {

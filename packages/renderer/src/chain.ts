@@ -1,3 +1,5 @@
+import { errorCodeOf } from "@buncrawl/core";
+
 import type { RenderRequest, Renderer, RendererCapabilities, RenderResult } from "./renderer";
 
 export type RenderResultAcceptance = (result: RenderResult) => boolean;
@@ -67,8 +69,9 @@ export class RendererChain implements FallbackRenderer {
       // more than letting it finish within the request deadline.
       const startNext = (): boolean => {
         if (done || started >= renderers.length) return false;
-        if (signal.aborted || request.deadline.expired) {
-          finish(() => reject(signal.reason ?? new Error("Render deadline expired")));
+        const stopped = request.deadline.stopReason();
+        if (stopped !== undefined) {
+          finish(() => reject(stopped));
           return false;
         }
         const index = started++;
@@ -148,12 +151,11 @@ function screenshotPriority(renderer: Renderer): number {
 
 function isTerminalError(error: unknown, signal: AbortSignal): boolean {
   if (signal.aborted) return true;
-  if (typeof error !== "object" || error === null || !("code" in error)) return false;
   return [
     "INVALID_URL",
     "BLOCKED_DESTINATION",
     "DNS_RESOLUTION_FAILED",
     "REQUEST_CANCELLED",
     "DEADLINE_EXCEEDED",
-  ].includes(String(error.code));
+  ].includes(errorCodeOf(error) ?? "");
 }

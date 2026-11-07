@@ -1,10 +1,12 @@
-import type {
-  ScrapeDocument,
-  ScrapeFormat,
-  ScrapeRequest,
-  ScrapeResponse,
+import {
+  DEFAULT_SCRAPE_TIMEOUT_MS,
+  isScreenshotFormat,
+  type ScrapeDocument,
+  type ScrapeFormat,
+  type ScrapeRequest,
+  type ScrapeResponse,
 } from "@buncrawl/contracts";
-import { Deadline } from "@buncrawl/core";
+import { Deadline, errorCodeOf } from "@buncrawl/core";
 import {
   extractInBackground,
   type ExtractedDocument,
@@ -17,13 +19,13 @@ import {
   createIsolatedDefaultRenderer,
   isFallbackRenderer,
   type Renderer,
+  type RenderRequest,
   type RenderResult,
 } from "@buncrawl/renderer";
 import { type DnsResolver, validateResolvedUrl } from "@buncrawl/security";
 
 import { scrapeCacheKey, type ScrapeCache } from "./cache";
 
-const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_FORMATS: ScrapeFormat[] = ["markdown"];
 let defaultRenderer: Renderer | undefined;
 
@@ -125,13 +127,10 @@ async function scrapeWithTimings(
   timed: Timed,
   timings: Omit<ScrapeTimings, "totalMs">,
 ): Promise<ScrapeResponse> {
-  const deadline = new Deadline(request.timeout ?? DEFAULT_TIMEOUT_MS, context.signal);
+  const deadline = new Deadline(request.timeout ?? DEFAULT_SCRAPE_TIMEOUT_MS, context.signal);
   const formats = request.formats ?? DEFAULT_FORMATS;
   const renderMode = request.renderJs ?? "auto";
-  const screenshotFormat = formats.find(
-    (format) => format === "screenshots" || typeof format === "object",
-  );
-  const screenshotRequested = screenshotFormat !== undefined;
+  const screenshotRequested = formats.some(isScreenshotFormat);
   const screenshotOnly = screenshotRequested && formats.every(isScreenshotFormat);
   const renderer = dependencies.renderer ?? createDefaultRenderer();
   const performFetch = dependencies.fetch ?? fetchPage;
@@ -173,61 +172,20 @@ async function scrapeWithTimings(
     const browserRequired = renderMode === true || screenshotRequested;
     const shouldRender = browserRequired || (renderMode === "auto" && fetchedDecision?.render);
 
-    let rendered: RenderResult | undefined;
-    let warning: string | undefined;
-    if (shouldRender) {
-      if (!renderer.capabilities().available) {
-        if (browserRequired || !fetched) {
-          return failure("RENDERER_UNAVAILABLE", "Browser rendering is unavailable");
-        }
-        warning = "Browser rendering was unavailable; returned fetched content";
-      } else {
-        try {
-          const renderRequest = {
-            url: fetched?.finalUrl ?? forcedRenderUrl?.href ?? request.url,
-            deadline,
-            ...(request.waitForMs === undefined ? {} : { waitForMs: request.waitForMs }),
-            ...(screenshotRequested
-              ? {
-                  screenshot: {
-                    fullPage:
-                      typeof screenshotFormat === "object"
-                        ? (screenshotFormat.fullPage ?? false)
-                        : false,
-                  },
-                }
-              : {}),
-            ...(typeof screenshotFormat === "object" && screenshotFormat.viewport
-              ? { viewport: screenshotFormat.viewport }
-              : {}),
-          };
-          const accept = (candidate: RenderResult) =>
-            screenshotRequested
-              ? candidate.screenshot !== undefined && candidate.html.trim().length > 0
-              : isRenderedContentBetter(candidate, fetched, fetchedDecision);
-          const candidate = await timed("renderMs", () =>
-            isFallbackRenderer(renderer)
-              ? renderer.renderWithFallback(
-                  renderRequest,
-                  accept,
-                  // In auto mode a render must beat the fetched page and Lightpanda's often does not,
-                  // so start the fallback renderer alongside it while it has spare capacity.
-                  fetched && !browserRequired ? { startFallbackAfterMs: 0 } : {},
-                )
-              : renderer.render(renderRequest),
-          );
-          if (browserRequired || isRenderedContentBetter(candidate, fetched, fetchedDecision)) {
-            rendered = candidate;
-            timings.renderer = candidate.renderer;
-          } else {
-            warning = "Browser rendering did not improve the fetched content";
-          }
-        } catch (error) {
-          if (browserRequired || !fetched) throw error;
-          warning = `Browser rendering failed; returned fetched content: ${errorMessage(error)}`;
-        }
-      }
-    }
+    const { rendered, warning, unavailable } = shouldRender
+      ? await renderPage({
+          request,
+          renderer,
+          url: fetched?.finalUrl ?? forcedRenderUrl?.href ?? request.url,
+          deadline,
+          fetched,
+          fetchedDecision,
+          browserRequired,
+          timed,
+          timings,
+        })
+      : {};
+    if (unavailable) return failure("RENDERER_UNAVAILABLE", "Browser rendering is unavailable");
 
     const selectedHtml = rendered?.html ?? fetched?.body;
     const finalUrl = rendered?.finalUrl ?? fetched?.finalUrl ?? request.url;
@@ -261,6 +219,79 @@ async function scrapeWithTimings(
   } catch (error) {
     return failure(errorCode(error, deadline, context.signal), errorMessage(error));
   }
+}
+
+interface RenderOutcome {
+  rendered?: RenderResult;
+  warning?: string;
+  /** A browser was required but none is available. */
+  unavailable?: true;
+}
+
+/**
+ * Renders the page in a browser. When fetched content exists, a render only replaces it if it is
+ * better, and a failed render degrades to the fetched content with a warning.
+ */
+async function renderPage(input: {
+  request: ScrapeRequest;
+  renderer: Renderer;
+  url: string;
+  deadline: Deadline;
+  fetched: FetchPageResult | undefined;
+  fetchedDecision: ReturnType<typeof detectRenderNeed> | undefined;
+  browserRequired: boolean;
+  timed: Timed;
+  timings: Omit<ScrapeTimings, "totalMs">;
+}): Promise<RenderOutcome> {
+  const { request, renderer, fetched, fetchedDecision, browserRequired } = input;
+  if (!renderer.capabilities().available) {
+    if (browserRequired || !fetched) return { unavailable: true };
+    return { warning: "Browser rendering was unavailable; returned fetched content" };
+  }
+  const renderRequest = buildRenderRequest(request, input.url, input.deadline);
+  const accept = (candidate: RenderResult) =>
+    renderRequest.screenshot
+      ? candidate.screenshot !== undefined && candidate.html.trim().length > 0
+      : isRenderedContentBetter(candidate, fetched, fetchedDecision);
+  try {
+    const candidate = await input.timed("renderMs", () =>
+      isFallbackRenderer(renderer)
+        ? renderer.renderWithFallback(
+            renderRequest,
+            accept,
+            // In auto mode a render must beat the fetched page and Lightpanda's often does not,
+            // so start the fallback renderer alongside it while it has spare capacity.
+            fetched && !browserRequired ? { startFallbackAfterMs: 0 } : {},
+          )
+        : renderer.render(renderRequest),
+    );
+    if (browserRequired || isRenderedContentBetter(candidate, fetched, fetchedDecision)) {
+      input.timings.renderer = candidate.renderer;
+      return { rendered: candidate };
+    }
+    return { warning: "Browser rendering did not improve the fetched content" };
+  } catch (error) {
+    if (browserRequired || !fetched) throw error;
+    return {
+      warning: `Browser rendering failed; returned fetched content: ${errorMessage(error)}`,
+    };
+  }
+}
+
+function buildRenderRequest(
+  request: ScrapeRequest,
+  url: string,
+  deadline: Deadline,
+): RenderRequest {
+  const screenshotFormat = (request.formats ?? DEFAULT_FORMATS).find(isScreenshotFormat);
+  const options = typeof screenshotFormat === "object" ? screenshotFormat : undefined;
+  return {
+    url,
+    deadline,
+    ...(request.waitForMs === undefined ? {} : { waitForMs: request.waitForMs }),
+    ...(screenshotFormat ? { screenshot: { fullPage: options?.fullPage ?? false } } : {}),
+    ...(options?.viewport ? { viewport: options.viewport } : {}),
+  };
 }
 
 function createDefaultRenderer(): Renderer {
@@ -312,10 +343,7 @@ function buildDocument(
   if (hasFormat(formats, "html")) document.html = extracted.html;
   if (hasFormat(formats, "rawHtml")) document.rawHtml = rawHtml;
   if (hasFormat(formats, "links")) document.links = extracted.links;
-  if (
-    formats.some((format) => format === "screenshots" || typeof format === "object") &&
-    rendered?.screenshot
-  ) {
+  if (formats.some(isScreenshotFormat) && rendered?.screenshot) {
     document.screenshot = screenshotDataUrl(rendered.screenshot);
   }
   return document;
@@ -323,10 +351,6 @@ function buildDocument(
 
 function hasFormat(formats: readonly ScrapeFormat[], expected: ScrapeFormat): boolean {
   return formats.includes(expected);
-}
-
-function isScreenshotFormat(format: ScrapeFormat): boolean {
-  return format === "screenshots" || typeof format === "object";
 }
 
 function screenshotDataUrl(screenshot: NonNullable<RenderResult["screenshot"]>): string {
@@ -337,11 +361,7 @@ function screenshotDataUrl(screenshot: NonNullable<RenderResult["screenshot"]>):
 function errorCode(error: unknown, deadline: Deadline, parentSignal?: AbortSignal): string {
   if (parentSignal?.aborted) return "REQUEST_CANCELLED";
   if (deadline.expired || deadline.signal.aborted) return "DEADLINE_EXCEEDED";
-  if (typeof error === "object" && error !== null && "code" in error) {
-    const code = (error as { code?: unknown }).code;
-    if (typeof code === "string") return code;
-  }
-  return "SCRAPE_FAILED";
+  return errorCodeOf(error) ?? "SCRAPE_FAILED";
 }
 
 function errorMessage(error: unknown): string {

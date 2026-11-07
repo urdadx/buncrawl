@@ -1,3 +1,5 @@
+import { resolveUrl } from "./url";
+
 export interface DocumentMetadata {
   title?: string;
   description?: string;
@@ -77,13 +79,4 @@ function compactMetadata(metadata: DocumentMetadata): DocumentMetadata {
 function cleanValue(value: string | null | undefined): string | undefined {
   const cleaned = value?.replace(/\s+/g, " ").trim();
   return cleaned || undefined;
-}
-
-function resolveUrl(value: string | null | undefined, baseUrl: string): string | undefined {
-  if (!value) return undefined;
-  try {
-    return new URL(value, baseUrl).href;
-  } catch {
-    return undefined;
-  }
 }

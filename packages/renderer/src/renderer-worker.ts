@@ -1,4 +1,4 @@
-import { Deadline } from "@buncrawl/core";
+import { Deadline, errorCodeOf } from "@buncrawl/core";
 
 import type { IsolatedRendererConfig, WorkerRenderRequest } from "./isolated";
 import { LightpandaRenderer } from "./lightpanda";
@@ -67,7 +67,7 @@ process.on("message", async (message: unknown) => {
       id: message.id,
       error: {
         message: error instanceof Error ? error.message : "Browser render failed",
-        ...(hasErrorCode(error) ? { code: error.code } : {}),
+        ...(errorCodeOf(error) ? { code: errorCodeOf(error) } : {}),
       },
     });
   }
@@ -86,10 +86,4 @@ function isWorkerRequest(value: unknown): value is { id: number; request: Worker
   if (typeof value !== "object" || value === null) return false;
   const message = value as { id?: unknown; request?: unknown };
   return typeof message.id === "number" && typeof message.request === "object";
-}
-
-function hasErrorCode(error: unknown): error is { code: string } {
-  return (
-    typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
-  );
 }

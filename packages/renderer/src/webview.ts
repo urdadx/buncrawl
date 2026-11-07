@@ -1,3 +1,5 @@
+import { errorCodeOf } from "@buncrawl/core";
+
 import {
   installBrowserNetworkGuard,
   type BrowserNetworkGuard,
@@ -18,6 +20,9 @@ const MAX_LAZY_SCROLL_STEPS = 80;
 const LAZY_SCROLL_PAUSE_MS = 50;
 const MAX_ASSET_WAIT_MS = 1000;
 const MAX_NAVIGATION_WAIT_MS = 10_000;
+/** How long to let in-flight request validations finish after navigation and after each capture. */
+const NAVIGATION_REQUESTS_SETTLE_MS = 2000;
+const CAPTURE_REQUESTS_SETTLE_MS = 250;
 
 type WebViewBackend = "chrome" | "webkit";
 
@@ -67,7 +72,7 @@ export interface WebViewRendererOptions {
   backend?: WebViewBackend;
   chrome?: ChromeLaunchOptions;
   stabilityTimeoutMs?: number;
-  networkSafety?: BrowserNetworkSafetyOptions | false;
+  networkSafety?: BrowserNetworkSafetyOptions;
   // creates a WebViewLike instance with the given options.
   // It allows for custom implementations of the WebView interface,
   // enabling flexibility in how the renderer interacts with different
@@ -100,7 +105,7 @@ export class WebViewRenderer implements Renderer {
   private readonly stabilityTimeoutMs: number;
   private readonly factory: WebViewFactory;
   private readonly customFactory: boolean;
-  private readonly networkSafety: BrowserNetworkSafetyOptions | false;
+  private readonly networkSafety: BrowserNetworkSafetyOptions;
 
   constructor(options: WebViewRendererOptions = {}) {
     if (options.chrome && options.backend === "webkit") {
@@ -132,161 +137,25 @@ export class WebViewRenderer implements Renderer {
   }
 
   async render(request: RenderRequest): Promise<RenderResult> {
-    if (request.deadline.signal.aborted || request.deadline.expired) {
-      throw request.deadline.signal.reason ?? new Error("Render deadline expired");
-    }
-
+    request.deadline.throwIfStopped();
     const startedAt = performance.now();
     const timings: Record<string, number> = {};
-    let view: WebViewLike;
-    const createStartedAt = performance.now();
-    try {
-      view = this.factory({
-        width: request.viewport?.width ?? DEFAULT_WIDTH,
-        height: request.viewport?.height ?? DEFAULT_HEIGHT,
-        ...(this.launchBackend ? { backend: this.launchBackend } : {}),
-        dataStore: "ephemeral",
-      });
-      timings.createViewMs = performance.now() - createStartedAt;
-    } catch (cause) {
-      throw new WebViewRendererError("WEBVIEW_UNAVAILABLE", "Bun.WebView is unavailable", {
-        cause,
-      });
-    }
+    const view = this.createView(request, timings);
 
     // Native WebView operations do not accept AbortSignal. Closing the view is
     // the only reliable way to interrupt navigation or evaluation at deadline.
     const abort = () => view.close();
     request.deadline.signal.addEventListener("abort", abort, { once: true });
-    let networkGuard: BrowserNetworkGuard | undefined;
-
+    const session: { guard?: BrowserNetworkGuard } = {};
     try {
-      const navigationStartedAt = performance.now();
-      try {
-        if (this.networkSafety !== false) {
-          if (!view.cdp || !view.addEventListener || !view.removeEventListener) {
-            throw new WebViewRendererError(
-              "WEBVIEW_UNAVAILABLE",
-              "Safe browser request interception requires the Chromium backend",
-            );
-          }
-          await view.navigate("about:blank");
-          networkGuard = await installBrowserNetworkGuard(
-            {
-              cdp: view.cdp.bind(view),
-              addEventListener: view.addEventListener.bind(view),
-              removeEventListener: view.removeEventListener.bind(view),
-            },
-            request.deadline.signal,
-            this.networkSafety,
-          );
-        } else if (this.usesCdpNavigation()) {
-          // Bun creates the CDP session on the first WebView navigation.
-          await view.navigate("about:blank");
-        }
-        if (request.viewport && view.cdp) {
-          await view.cdp("Emulation.setDeviceMetricsOverride", {
-            width: request.viewport.width,
-            height: request.viewport.height,
-            deviceScaleFactor: 1,
-            mobile: false,
-          });
-        }
-        if (this.usesCdpNavigation() && this.networkSafety === false && view.cdp) {
-          const navigation = await view.cdp("Page.navigate", { url: request.url });
-          const errorText = readNavigationError(navigation);
-          if (errorText) throw new Error(errorText);
-        } else {
-          await waitForNavigation(
-            view.navigate(request.url),
-            Math.min(MAX_NAVIGATION_WAIT_MS, request.deadline.remainingMs),
-            request.deadline.signal,
-          );
-        }
-        await networkGuard?.settled(2000);
-        networkGuard?.throwIfBlocked();
-        timings.navigationMs = performance.now() - navigationStartedAt;
-      } catch (cause) {
-        if (request.deadline.signal.aborted) {
-          throw request.deadline.signal.reason ?? cause;
-        }
-        if (cause instanceof WebViewRendererError || hasSafetyErrorCode(cause)) throw cause;
-        throw new WebViewRendererError(
-          "WEBVIEW_NAVIGATION_FAILED",
-          `WebView failed to navigate to ${request.url}`,
-          { cause },
-        );
-      }
-
-      if (request.waitForMs && request.waitForMs > 0) {
-        const waitStartedAt = performance.now();
-        await sleepWithinDeadline(request.waitForMs, request.deadline.signal);
-        timings.explicitWaitMs = performance.now() - waitStartedAt;
-      }
-      const settleStartedAt = performance.now();
-      const readiness = await waitForDomReadiness(
-        view,
-        Math.min(this.stabilityTimeoutMs, request.deadline.remainingMs),
-        request.deadline.signal,
-      );
-      await networkGuard?.settled(250);
-      networkGuard?.throwIfBlocked();
-      timings.initialSettleMs = performance.now() - settleStartedAt;
-      timings.meaningfulContent = readiness.meaningful ? 1 : 0;
-
-      const fullPage = typeof request.screenshot === "object" && request.screenshot.fullPage;
-      if (fullPage) {
-        const lazyLoadStartedAt = performance.now();
-        await activateLazyContent(
-          view,
-          request.viewport?.height ?? DEFAULT_HEIGHT,
-          Math.min(MAX_LAZY_LOAD_MS, request.deadline.remainingMs),
-          request.deadline.signal,
-        );
-        timings.lazyLoadMs = performance.now() - lazyLoadStartedAt;
-      }
-      if (request.screenshot) {
-        const assetWaitStartedAt = performance.now();
-        await waitForVisualAssets(
-          view,
-          Math.min(MAX_ASSET_WAIT_MS, request.deadline.remainingMs),
-          Boolean(fullPage),
-        );
-        timings.assetWaitMs = performance.now() - assetWaitStartedAt;
-      }
-
-      const htmlStartedAt = performance.now();
-      const html = await view.evaluate("document.documentElement.outerHTML");
-      await networkGuard?.settled(250);
-      networkGuard?.throwIfBlocked();
-      if (typeof html !== "string") {
-        throw new WebViewRendererError(
-          "WEBVIEW_INVALID_RESULT",
-          "WebView returned a non-string document",
-        );
-      }
-      timings.htmlMs = performance.now() - htmlStartedAt;
-
-      let screenshot: RenderResult["screenshot"];
-      if (request.screenshot) {
-        const screenshotStartedAt = performance.now();
-        const data = fullPage
-          ? await captureFullPageScreenshot(view)
-          : await view.screenshot({ format: "png", encoding: "base64" });
-        if (typeof data !== "string") {
-          throw new WebViewRendererError(
-            "WEBVIEW_INVALID_RESULT",
-            "WebView returned an unexpected screenshot encoding",
-          );
-        }
-        screenshot = { data, mimeType: "image/png" };
-        timings.screenshotMs = performance.now() - screenshotStartedAt;
-      }
+      await this.navigate(view, request, session, timings);
+      const guard = session.guard!;
+      await this.settle(view, request, guard, timings);
+      const { html, screenshot } = await this.capture(view, request, guard, timings);
 
       timings.totalMs = performance.now() - startedAt;
-      if (networkGuard) timings.blockedSubrequests = networkGuard.blockedSubrequests();
+      timings.blockedSubrequests = guard.blockedSubrequests();
       console.info(JSON.stringify({ event: "webview_render", timings }));
-
       return {
         sourceUrl: request.url,
         finalUrl: view.url,
@@ -297,23 +166,163 @@ export class WebViewRenderer implements Renderer {
         ...(screenshot ? { screenshot } : {}),
       };
     } finally {
-      networkGuard?.close();
+      session.guard?.close();
       request.deadline.signal.removeEventListener("abort", abort);
       view.close();
     }
   }
 
-  private usesCdpNavigation(): boolean {
-    if (this.customFactory) return false;
-    return (
-      this.backend === "chrome" || (this.backend === undefined && process.platform !== "darwin")
-    );
+  private createView(request: RenderRequest, timings: Record<string, number>): WebViewLike {
+    const createStartedAt = performance.now();
+    try {
+      const view = this.factory({
+        width: request.viewport?.width ?? DEFAULT_WIDTH,
+        height: request.viewport?.height ?? DEFAULT_HEIGHT,
+        ...(this.launchBackend ? { backend: this.launchBackend } : {}),
+        dataStore: "ephemeral",
+      });
+      timings.createViewMs = performance.now() - createStartedAt;
+      return view;
+    } catch (cause) {
+      throw new WebViewRendererError("WEBVIEW_UNAVAILABLE", "Bun.WebView is unavailable", {
+        cause,
+      });
+    }
   }
-}
 
-function readNavigationError(value: unknown): string | undefined {
-  if (typeof value !== "object" || value === null || !("errorText" in value)) return;
-  return typeof value.errorText === "string" && value.errorText ? value.errorText : undefined;
+  /** Installs request interception, then loads the page; `session.guard` is set once installed. */
+  private async navigate(
+    view: WebViewLike,
+    request: RenderRequest,
+    session: { guard?: BrowserNetworkGuard },
+    timings: Record<string, number>,
+  ): Promise<void> {
+    const navigationStartedAt = performance.now();
+    try {
+      if (!view.cdp || !view.addEventListener || !view.removeEventListener) {
+        throw new WebViewRendererError(
+          "WEBVIEW_UNAVAILABLE",
+          "Safe browser request interception requires the Chromium backend",
+        );
+      }
+      // Bun creates the CDP session on the first navigation, before interception can start.
+      await view.navigate("about:blank");
+      session.guard = await installBrowserNetworkGuard(
+        {
+          cdp: view.cdp.bind(view),
+          addEventListener: view.addEventListener.bind(view),
+          removeEventListener: view.removeEventListener.bind(view),
+        },
+        request.deadline.signal,
+        this.networkSafety,
+      );
+      if (request.viewport) {
+        await view.cdp("Emulation.setDeviceMetricsOverride", {
+          width: request.viewport.width,
+          height: request.viewport.height,
+          deviceScaleFactor: 1,
+          mobile: false,
+        });
+      }
+      await waitForNavigation(
+        view.navigate(request.url),
+        Math.min(MAX_NAVIGATION_WAIT_MS, request.deadline.remainingMs),
+        request.deadline.signal,
+      );
+      await session.guard.settled(NAVIGATION_REQUESTS_SETTLE_MS);
+      session.guard.throwIfBlocked();
+      timings.navigationMs = performance.now() - navigationStartedAt;
+    } catch (cause) {
+      if (request.deadline.signal.aborted) {
+        throw request.deadline.signal.reason ?? cause;
+      }
+      if (cause instanceof WebViewRendererError || hasSafetyErrorCode(cause)) throw cause;
+      throw new WebViewRendererError(
+        "WEBVIEW_NAVIGATION_FAILED",
+        `WebView failed to navigate to ${request.url}`,
+        { cause },
+      );
+    }
+  }
+
+  /** Honors an explicit `waitForMs`, then waits for the DOM to stabilize. */
+  private async settle(
+    view: WebViewLike,
+    request: RenderRequest,
+    guard: BrowserNetworkGuard,
+    timings: Record<string, number>,
+  ): Promise<void> {
+    if (request.waitForMs && request.waitForMs > 0) {
+      const waitStartedAt = performance.now();
+      await sleepWithinDeadline(request.waitForMs, request.deadline.signal);
+      timings.explicitWaitMs = performance.now() - waitStartedAt;
+    }
+    const settleStartedAt = performance.now();
+    const readiness = await waitForDomReadiness(
+      view,
+      Math.min(this.stabilityTimeoutMs, request.deadline.remainingMs),
+      request.deadline.signal,
+    );
+    await guard.settled(CAPTURE_REQUESTS_SETTLE_MS);
+    guard.throwIfBlocked();
+    timings.initialSettleMs = performance.now() - settleStartedAt;
+    timings.meaningfulContent = readiness.meaningful ? 1 : 0;
+  }
+
+  /** Reads the document and, when requested, prepares and takes the screenshot. */
+  private async capture(
+    view: WebViewLike,
+    request: RenderRequest,
+    guard: BrowserNetworkGuard,
+    timings: Record<string, number>,
+  ): Promise<{ html: string; screenshot?: RenderResult["screenshot"] }> {
+    const fullPage = typeof request.screenshot === "object" && request.screenshot.fullPage;
+    if (fullPage) {
+      const lazyLoadStartedAt = performance.now();
+      await activateLazyContent(
+        view,
+        request.viewport?.height ?? DEFAULT_HEIGHT,
+        Math.min(MAX_LAZY_LOAD_MS, request.deadline.remainingMs),
+        request.deadline.signal,
+      );
+      timings.lazyLoadMs = performance.now() - lazyLoadStartedAt;
+    }
+    if (request.screenshot) {
+      const assetWaitStartedAt = performance.now();
+      await waitForVisualAssets(
+        view,
+        Math.min(MAX_ASSET_WAIT_MS, request.deadline.remainingMs),
+        Boolean(fullPage),
+      );
+      timings.assetWaitMs = performance.now() - assetWaitStartedAt;
+    }
+
+    const htmlStartedAt = performance.now();
+    const html = await view.evaluate("document.documentElement.outerHTML");
+    await guard.settled(CAPTURE_REQUESTS_SETTLE_MS);
+    guard.throwIfBlocked();
+    if (typeof html !== "string") {
+      throw new WebViewRendererError(
+        "WEBVIEW_INVALID_RESULT",
+        "WebView returned a non-string document",
+      );
+    }
+    timings.htmlMs = performance.now() - htmlStartedAt;
+    if (!request.screenshot) return { html };
+
+    const screenshotStartedAt = performance.now();
+    const data = fullPage
+      ? await captureFullPageScreenshot(view)
+      : await view.screenshot({ format: "png", encoding: "base64" });
+    if (typeof data !== "string") {
+      throw new WebViewRendererError(
+        "WEBVIEW_INVALID_RESULT",
+        "WebView returned an unexpected screenshot encoding",
+      );
+    }
+    timings.screenshotMs = performance.now() - screenshotStartedAt;
+    return { html, screenshot: { data, mimeType: "image/png" } };
+  }
 }
 
 async function waitForNavigation(
@@ -562,7 +571,6 @@ async function waitForDomReadiness(
   return { meaningful };
 }
 
-// how do we detect a DOM state? We detect a DOM state by evaluating a script in the WebView that returns an object containing the document's readyState and the length of the outerHTML of the document's root element. This allows us to monitor changes in the DOM and determine if it has stabilized.
 function isDomState(value: unknown): value is {
   readyState: string;
   htmlLength: number;
@@ -608,10 +616,9 @@ function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) throw signal.reason ?? new Error("Render aborted");
 }
 
-function hasSafetyErrorCode(error: unknown): error is { code: string } {
-  if (typeof error !== "object" || error === null || !("code" in error)) return false;
+function hasSafetyErrorCode(error: unknown): boolean {
   return ["INVALID_URL", "BLOCKED_DESTINATION", "DNS_RESOLUTION_FAILED"].includes(
-    String(error.code),
+    errorCodeOf(error) ?? "",
   );
 }
 

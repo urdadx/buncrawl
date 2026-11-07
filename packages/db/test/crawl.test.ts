@@ -244,3 +244,19 @@ test("discards a page whose redirect lands on an already-crawled page and frees 
     true,
   );
 });
+
+test("a second job crawling the same origin still gets its own host row", async () => {
+  const { db, id: first } = await setup();
+  const { job: second } = await enqueueJob(db, {
+    submission: { type: "map", url: "https://site.example" },
+    limits: { maxItems: 3, timeoutMs: 60_000 },
+  });
+  const origin = "https://site.example";
+  for (const jobId of [first, second.id])
+    expect(await enqueueCrawlUrl(db, jobId, { url: `${origin}/`, origin, depth: 0 }, limits)).toBe(
+      true,
+    );
+  // Claiming requires the job's host row; the in-process host memo must not skip creating it.
+  expect(await getCrawlHost(db, second.id, origin)).toBeDefined();
+  expect((await claimCrawlUrl(db, second.id, "worker", 1000, limits))?.url).toBe(`${origin}/`);
+});

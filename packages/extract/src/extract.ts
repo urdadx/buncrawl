@@ -3,8 +3,6 @@ import { extractLinks } from "./links";
 import { htmlToMarkdown } from "./markdown";
 import { extractMetadata, type DocumentMetadata } from "./metadata";
 
-export interface ExtractDocumentOptions extends CleanHtmlOptions {}
-
 export interface ExtractedDocument {
   html: string;
   markdown: string;
@@ -12,10 +10,7 @@ export interface ExtractedDocument {
   metadata: DocumentMetadata;
 }
 
-export function extractDocument(
-  rawHtml: string,
-  options: ExtractDocumentOptions,
-): ExtractedDocument {
+export function extractDocument(rawHtml: string, options: CleanHtmlOptions): ExtractedDocument {
   // Metadata and links are read before cleaning so head elements and navigation
   // links remain available even when they are omitted from main-content output.
   const metadata = extractMetadata(rawHtml, options.baseUrl);

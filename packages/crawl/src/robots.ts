@@ -116,6 +116,35 @@ export async function loadRobots(
   } = {},
 ): Promise<RobotsFile> {
   const now = options.now ?? new Date();
+  // Every discovered link checks robots; serve parsed rules from memory instead of the database.
+  // Concurrent first requests for a host share one fetch; a failed load is not remembered.
+  const key = `${jobId}\n${origin}\n${userAgent}`;
+  let memo = loadedRobots.get(db);
+  if (!memo) loadedRobots.set(db, (memo = new Map()));
+  const known = memo.get(key);
+  if (known && known.expiresAt > now.getTime()) return known.file;
+  const file = readOrFetchRobots(db, jobId, origin, userAgent, options, now);
+  const entry = { file, expiresAt: now.getTime() + (options.ttlMs ?? ROBOTS_TTL_MS) };
+  memo.set(key, entry);
+  file.catch(() => {
+    if (memo.get(key) === entry) memo.delete(key);
+  });
+  return file;
+}
+
+const loadedRobots = new WeakMap<
+  Database,
+  Map<string, { file: Promise<RobotsFile>; expiresAt: number }>
+>();
+
+async function readOrFetchRobots(
+  db: Database,
+  jobId: string,
+  origin: string,
+  userAgent: string,
+  options: Parameters<typeof loadRobots>[4] & object,
+  now: Date,
+): Promise<RobotsFile> {
   await scheduleCrawlHost(db, jobId, origin);
   const cached = await getCrawlHost(db, jobId, origin);
 

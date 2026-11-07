@@ -69,7 +69,7 @@ export interface DetectRenderOptions {
   statusCode?: number;
 }
 
-// detects whether a given HTML document requires rendering in a browser to be properly processed. This function analyzes the HTML content and its characteristics to determine if it is likely to be a bot challenge, a client-side redirect, or if it requires JavaScript execution to display meaningful content. It also checks for single-page application (SPA) markers and loading placeholders that may indicate the need for rendering.
+// Decides whether fetched HTML needs a browser: bot challenges, client redirects, SPA shells, placeholders.
 export function detectRenderNeed(html: string, options: DetectRenderOptions = {}): RenderDecision {
   if (!isHtmlContentType(options.contentType) || options.statusCode === 204) {
     return { render: false, visibleTextLength: 0 };
@@ -118,7 +118,7 @@ export function detectRenderNeed(html: string, options: DetectRenderOptions = {}
   return { render: false, visibleTextLength };
 }
 
-// hasClientRedirect checks if the HTML contains a meta refresh tag that redirects to another URL. It looks for <meta> tags with http-equiv="refresh" and a URL specified in the content attribute.? why is it looking for meta refresh tags? Because they can be used to redirect users to another page, which may require rendering to follow the redirect and obtain the final content.
+// A meta refresh only redirects in a browser, so the fetched page is not the final content.
 export function hasClientRedirect(html: string): boolean {
   const lower = html.toLowerCase();
   for (const fragment of lower.split("<meta").slice(1)) {
@@ -130,7 +130,7 @@ export function hasClientRedirect(html: string): boolean {
   return false;
 }
 
-// why is this function counting executable scripts? Because the presence of executable scripts may indicate that the page relies on JavaScript for rendering content, which may require rendering in a browser to obtain the final content.
+// Script-heavy pages with little text usually build their content client-side.
 export function countExecutableScripts(html: string): number {
   const lower = html.toLowerCase();
   let count = 0;

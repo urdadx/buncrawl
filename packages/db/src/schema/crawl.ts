@@ -56,6 +56,7 @@ export const crawlFrontier = sqliteTable(
     primaryKey({ columns: [table.jobId, table.url] }),
     index("crawl_frontier_claim_idx").on(table.state, table.createdAt),
     index("crawl_frontier_host_idx").on(table.jobId, table.origin, table.state),
+    index("crawl_frontier_final_url_idx").on(table.jobId, table.finalUrl),
     check("crawl_frontier_depth_check", sql`${table.depth} >= 0`),
     check("crawl_frontier_bytes_check", sql`${table.byteSize} >= 0`),
     check("crawl_frontier_reserved_check", sql`${table.reservedBytes} >= 0`),

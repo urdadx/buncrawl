@@ -1,5 +1,10 @@
 import { Deadline } from "@buncrawl/core";
-import { remainingCrawlBytes, type CrawlLimits, type Database } from "@buncrawl/db";
+import {
+  MAX_CRAWL_PAGE_BYTES,
+  remainingCrawlBytes,
+  type CrawlLimits,
+  type Database,
+} from "@buncrawl/db";
 import { extractLinks } from "@buncrawl/extract";
 import { fetchPage, type FetchPageOptions } from "@buncrawl/fetcher";
 
@@ -49,7 +54,7 @@ export async function fetchCrawlPage(
   if (available <= 0) throw new Error("Crawl byte limit exceeded");
   const page = await fetchPage(url, {
     ...fetchOptions,
-    maxResponseBytes: Math.min(available, 10 * 1024 * 1024),
+    maxResponseBytes: Math.min(available, MAX_CRAWL_PAGE_BYTES),
     headers: { "User-Agent": options.userAgent },
     beforeRedirect: async (target) => check(target.href),
   });
