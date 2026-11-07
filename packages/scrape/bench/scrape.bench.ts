@@ -1,10 +1,11 @@
 /**
  * Scrape latency benchmark against real sites.
  *
- *   bun packages/scrape/bench/scrape.bench.ts [--runs 2] [--out results.json] [--compare base.json]
+ *   bun packages/scrape/bench/scrape.bench.ts [--runs 2] [--modes auto,render,screenshot]
+ *     [--out results.json] [--compare base.json]
  *
- * Every URL is scraped `runs` times in "auto" mode and with forced browser rendering, one at a time
- * so measurements don't contend. Network conditions vary, so compare medians across runs, never
+ * Every URL is scraped `runs` times per mode ("auto", forced "render", and "screenshot", which uses
+ * the WebView path), one at a time so measurements don't contend. Network conditions vary, so compare medians across runs, never
  * single samples.
  */
 import type { ScrapeRequest } from "@buncrawl/contracts";
@@ -25,12 +26,12 @@ const URLS = [
   "https://github.com/oven-sh/bun",
   "https://www.bbc.com/news",
 ];
-const MODES = ["auto", "render"] as const;
+const ALL_MODES = ["auto", "render", "screenshot"] as const;
 const PHASES = ["fetchMs", "detectMs", "renderMs", "extractMs", "totalMs"] as const;
 
 type Sample = {
   url: string;
-  mode: (typeof MODES)[number];
+  mode: (typeof ALL_MODES)[number];
   run: number;
   success: boolean;
   code?: string;
@@ -42,13 +43,20 @@ const args = new Map<string, string>();
 for (let i = 2; i < Bun.argv.length; i += 2)
   args.set(Bun.argv[i]!.replace(/^--/, ""), Bun.argv[i + 1]!);
 const runs = Number(args.get("runs") ?? 2);
+const MODES = (args.get("modes")?.split(",") ?? ["auto", "render"]).filter(
+  (mode): mode is (typeof ALL_MODES)[number] => (ALL_MODES as readonly string[]).includes(mode),
+);
 
 const samples: Sample[] = [];
 for (const mode of MODES) {
   for (const url of URLS) {
     for (let run = 1; run <= runs; run++) {
       let timings: ScrapeTimings = { totalMs: 0, renderer: "none" };
-      const request: ScrapeRequest = { url, ...(mode === "render" ? { renderJs: true } : {}) };
+      const request: ScrapeRequest = {
+        url,
+        ...(mode === "render" ? { renderJs: true } : {}),
+        ...(mode === "screenshot" ? { formats: ["markdown", "screenshots"] } : {}),
+      };
       const response = await scrape(request, { onTimings: (value) => (timings = value) });
       const sample: Sample = {
         url,

@@ -19,11 +19,14 @@ export interface BrowserNetworkSafetyOptions {
 interface PausedRequest {
   requestId: string;
   request: { url: string };
+  resourceType?: string;
+  frameId?: string;
 }
 
 export interface BrowserNetworkGuard {
   settled(maxWaitMs?: number): Promise<void>;
   throwIfBlocked(): void;
+  blockedSubrequests(): number;
   close(): void;
 }
 
@@ -34,6 +37,8 @@ export async function installBrowserNetworkGuard(
   options: BrowserNetworkSafetyOptions = {},
 ): Promise<BrowserNetworkGuard> {
   let blocked: unknown;
+  let blockedSubrequests = 0;
+  let mainFrameId: string | undefined;
   const pending = new Set<Promise<void>>();
   let commands = Promise.resolve<unknown>(undefined);
   const validate = createConcurrencyLimiter(options.maxConcurrentValidations ?? 8);
@@ -63,7 +68,10 @@ export async function installBrowserNetworkGuard(
         });
         await command("Fetch.continueRequest", { requestId: paused.requestId });
       } catch (error) {
-        blocked ??= error;
+        // Every unsafe request is failed, but only a blocked top-level navigation fails the render;
+        // a blocked image, script or iframe just leaves that resource missing from the page.
+        if (signal.aborted || isTopLevelNavigation(paused, mainFrameId)) blocked ??= error;
+        else blockedSubrequests += 1;
         await command("Fetch.failRequest", {
           requestId: paused.requestId,
           errorReason: "BlockedByClient",
@@ -87,6 +95,9 @@ export async function installBrowserNetworkGuard(
       { cause },
     );
   }
+  // The main frame keeps its id across navigations. Without it every Document request is treated
+  // as a top-level navigation, so a lookup failure only makes the guard stricter.
+  mainFrameId = await command("Page.getFrameTree").then(readMainFrameId, () => undefined);
 
   return {
     async settled(maxWaitMs = 1000) {
@@ -98,6 +109,9 @@ export async function installBrowserNetworkGuard(
     },
     throwIfBlocked() {
       if (blocked) throw blocked;
+    },
+    blockedSubrequests() {
+      return blockedSubrequests;
     },
     close() {
       view.removeEventListener("Fetch.requestPaused", listener);
@@ -142,14 +156,37 @@ function createConcurrencyLimiter(limit: number) {
 
 function parsePausedRequest(value: unknown): PausedRequest | undefined {
   if (typeof value !== "object" || value === null) return;
-  const candidate = value as { requestId?: unknown; request?: { url?: unknown } };
+  const candidate = value as {
+    requestId?: unknown;
+    request?: { url?: unknown };
+    resourceType?: unknown;
+    frameId?: unknown;
+  };
   if (typeof candidate.requestId !== "string" || typeof candidate.request?.url !== "string") {
     return;
   }
   return {
     requestId: candidate.requestId,
     request: { url: candidate.request.url },
+    ...(typeof candidate.resourceType === "string" ? { resourceType: candidate.resourceType } : {}),
+    ...(typeof candidate.frameId === "string" ? { frameId: candidate.frameId } : {}),
   };
+}
+
+// isTopLevelNavigation fails closed: a request with no resource type, or a Document whose frame
+// cannot be told apart from the main frame, counts as the page navigation.
+function isTopLevelNavigation(paused: PausedRequest, mainFrameId: string | undefined): boolean {
+  if (paused.resourceType === undefined) return true;
+  if (paused.resourceType !== "Document") return false;
+  return (
+    mainFrameId === undefined || paused.frameId === undefined || paused.frameId === mainFrameId
+  );
+}
+
+function readMainFrameId(value: unknown): string | undefined {
+  const id = (value as { frameTree?: { frame?: { id?: unknown } } } | undefined)?.frameTree?.frame
+    ?.id;
+  return typeof id === "string" ? id : undefined;
 }
 
 function isLocalDocumentUrl(value: string): boolean {

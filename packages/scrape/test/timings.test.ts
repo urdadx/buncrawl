@@ -42,6 +42,7 @@ const spaShell = `<html><body><div id="root"></div><script src="/app.js"></scrip
 const renderedPage: RenderResult = {
   sourceUrl: "https://example.com/",
   finalUrl: "https://example.com/",
+  title: "Rendered",
   html: `<html><body><main><h1>Rendered</h1><p>${"Useful rendered content. ".repeat(30)}</p></main></body></html>`,
   renderer: "webview",
   elapsedMs: 15,

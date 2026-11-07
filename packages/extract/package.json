@@ -12,14 +12,12 @@
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
     "linkedom": "^0.18.13",
-    "turndown": "7.2.4",
-    "turndown-plugin-gfm": "1.0.2"
+    "node-html-markdown": "2.0.0"
   },
   "devDependencies": {
     "@buncrawl/config": "workspace:*",
     "@types/bun": "catalog:",
     "@types/mozilla-readability": "^0.2.1",
-    "@types/turndown": "5.0.6",
     "typescript": "catalog:"
   }
 }

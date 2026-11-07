@@ -45,7 +45,7 @@ describe("CRW main-content comparison", () => {
     for (const content of [
       "# Understanding Rust Ownership",
       "## The Three Rules",
-      "1.  Each value in Rust",
+      "1. Each value in Rust",
       "## Borrowing",
       'let s = String::from("hello");',
       "[Next: Understanding Lifetimes](https://example.com/posts/lifetimes)",

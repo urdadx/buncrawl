@@ -5,7 +5,12 @@ import type {
   ScrapeResponse,
 } from "@buncrawl/contracts";
 import { Deadline } from "@buncrawl/core";
-import { absolutizeHtmlUrls, extractDocument } from "@buncrawl/extract";
+import {
+  extractInBackground,
+  type ExtractedDocument,
+  type ExtractJob,
+  type ExtractJobOutput,
+} from "@buncrawl/extract";
 import { fetchPage, type FetchImplementation, type FetchPageResult } from "@buncrawl/fetcher";
 import {
   detectRenderNeed,
@@ -25,6 +30,8 @@ type FetchPage = typeof fetchPage;
 export interface ScrapeDependencies {
   fetch?: FetchPage;
   renderer?: Renderer;
+  /** Runs HTML extraction; defaults to the shared worker pool so parsing never blocks the event loop. */
+  extract?: (job: ExtractJob, signal: AbortSignal) => Promise<ExtractJobOutput>;
 }
 
 export interface ScrapeContext {
@@ -187,14 +194,17 @@ async function scrapeWithTimings(
     }
 
     deadline.throwIfExpired();
-    const { rawHtml, extracted } = await timed("extractMs", () => {
-      const rawHtml = absolutizeHtmlUrls(selectedHtml, finalUrl);
-      const extracted = extractDocument(rawHtml, {
-        baseUrl: finalUrl,
-        onlyMainContent: request.onlyMainContent ?? true,
-      });
-      return { rawHtml, extracted };
-    });
+    const { rawHtml = "", extracted } = await timed("extractMs", () =>
+      (dependencies.extract ?? extractInBackground)(
+        {
+          html: selectedHtml,
+          baseUrl: finalUrl,
+          onlyMainContent: request.onlyMainContent ?? true,
+          includeRawHtml: hasFormat(formats, "rawHtml"),
+        },
+        deadline.signal,
+      ),
+    );
     const document = buildDocument(
       request,
       formats,
@@ -239,7 +249,7 @@ function isRenderedContentBetter(
 function buildDocument(
   request: ScrapeRequest,
   formats: readonly ScrapeFormat[],
-  extracted: ReturnType<typeof extractDocument>,
+  extracted: ExtractedDocument,
   fetched: FetchPageResult | undefined,
   rendered: RenderResult | undefined,
   finalUrl: string,

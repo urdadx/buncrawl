@@ -247,7 +247,11 @@ export class WebViewRenderer implements Renderer {
       }
       if (request.screenshot) {
         const assetWaitStartedAt = performance.now();
-        await waitForVisualAssets(view, Math.min(MAX_ASSET_WAIT_MS, request.deadline.remainingMs));
+        await waitForVisualAssets(
+          view,
+          Math.min(MAX_ASSET_WAIT_MS, request.deadline.remainingMs),
+          Boolean(fullPage),
+        );
         timings.assetWaitMs = performance.now() - assetWaitStartedAt;
       }
 
@@ -280,6 +284,7 @@ export class WebViewRenderer implements Renderer {
       }
 
       timings.totalMs = performance.now() - startedAt;
+      if (networkGuard) timings.blockedSubrequests = networkGuard.blockedSubrequests();
       console.info(JSON.stringify({ event: "webview_render", timings }));
 
       return {
@@ -340,9 +345,24 @@ async function waitForNavigation(
   }
 }
 
-async function waitForVisualAssets(view: WebViewLike, timeoutMs: number): Promise<void> {
+/**
+ * Waits for fonts and images that will appear in the screenshot. A viewport screenshot only waits
+ * for images inside the viewport: lazy images below the fold never load without scrolling, so
+ * waiting on them always ran into the timeout. Full-page captures scroll first and wait for all.
+ */
+async function waitForVisualAssets(
+  view: WebViewLike,
+  timeoutMs: number,
+  fullPage: boolean,
+): Promise<void> {
   if (timeoutMs <= 0) return;
   await view.evaluate(`(async () => {
+    const inViewport = (image) => {
+      const rect = image.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0 &&
+        rect.top < innerHeight && rect.left < innerWidth;
+    };
+    const images = Array.from(document.images).filter(${fullPage ? "() => true" : "inViewport"});
     const waitForImage = async (image) => {
       if (!image.complete) {
         await new Promise((resolve) => {
@@ -355,7 +375,7 @@ async function waitForVisualAssets(view: WebViewLike, timeoutMs: number): Promis
     await Promise.race([
       Promise.allSettled([
         document.fonts?.ready,
-        ...Array.from(document.images).map(waitForImage),
+        ...images.map(waitForImage),
       ]),
       new Promise((resolve) => setTimeout(resolve, ${Math.floor(timeoutMs)})),
     ]);

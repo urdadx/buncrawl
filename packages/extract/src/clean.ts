@@ -188,15 +188,24 @@ interface ContentQuality {
   semanticCoverage: number;
 }
 
+type ParsedDocument = ReturnType<typeof parseHTML>["document"];
+
 interface TextElement {
   textContent: string | null;
 }
 
 function selectMainContent(cleaned: string): string {
-  const readable = extractReadableContent(cleaned);
+  let document: ParsedDocument;
+  try {
+    ({ document } = parseHTML(cleaned));
+  } catch {
+    return cleaned;
+  }
+  // Measure first: Readability mutates the document, and parsing it once saves a full DOM build.
+  const cleanedQuality = measureDocumentQuality(document);
+  const readable = extractReadableContent(document);
   if (!readable) return cleaned;
 
-  const cleanedQuality = measureContentQuality(cleaned);
   const readableQuality = measureContentQuality(readable);
   const retention = readableQuality.textLength / Math.max(1, cleanedQuality.textLength);
   const canDiscardLinkedNavigation =
@@ -211,9 +220,8 @@ function selectMainContent(cleaned: string): string {
     : cleaned;
 }
 
-function extractReadableContent(html: string): string | undefined {
+function extractReadableContent(document: ParsedDocument): string | undefined {
   try {
-    const { document } = parseHTML(html);
     const article = new Readability(document).parse();
     if (!article?.content || (article.textContent?.trim().length ?? 0) < MIN_READABLE_TEXT) {
       return undefined;
@@ -230,7 +238,14 @@ function extractReadableContent(html: string): string | undefined {
 
 function measureContentQuality(html: string): ContentQuality {
   try {
-    const { document } = parseHTML(html);
+    return measureDocumentQuality(parseHTML(html).document);
+  } catch {
+    return { score: 0, textLength: 0, linkDensity: 0, semanticCoverage: 0 };
+  }
+}
+
+function measureDocumentQuality(document: ParsedDocument): ContentQuality {
+  try {
     const textLength = normalizedTextLength(
       document.body?.textContent || document.documentElement?.textContent,
     );
