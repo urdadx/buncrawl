@@ -1,6 +1,5 @@
 import type { ScrapeDocument, ScrapeFormat, ScrapeRequest } from "@buncrawl/contracts";
 
-/** Storage for successful scrape results; the server backs it with SQLite. */
 export interface ScrapeCache {
   get(
     key: string,

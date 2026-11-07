@@ -39,7 +39,16 @@ if (config.type === "lightpanda") {
   });
 }
 
-process.on("disconnect", () => safetyProxy?.close());
+const shutdown = () => {
+  safetyProxy?.close();
+  (renderer as { close?(): void }).close?.();
+};
+process.on("disconnect", shutdown);
+// The pool stops workers with SIGTERM; clean up children before exiting.
+process.on("SIGTERM", () => {
+  shutdown();
+  process.exit(0);
+});
 
 process.on("message", async (message: unknown) => {
   if (!isWorkerRequest(message)) return;

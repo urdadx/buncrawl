@@ -1,3 +1,9 @@
+import {
+  launchLightpandaServer,
+  LightpandaPageError,
+  LightpandaServer,
+  LightpandaServerUnavailableError,
+} from "./lightpanda-server";
 import type { RenderRequest, Renderer, RendererCapabilities, RenderResult } from "./renderer";
 
 const DEFAULT_WAIT_MS = 2000;
@@ -22,6 +28,11 @@ export interface LightpandaRendererOptions {
   waitMs?: number;
   proxyUrl?: string;
   runner?: CommandRunner;
+  /**
+   * Long-lived `lightpanda serve` used for HTML renders; `false` runs `lightpanda fetch` per page.
+   * Defaults to a server unless a custom `runner` is given.
+   */
+  server?: LightpandaServer | false;
 }
 
 export type LightpandaRendererErrorCode =
@@ -48,6 +59,7 @@ export class LightpandaRenderer implements Renderer {
   private readonly runner: CommandRunner;
   private readonly customRunner: boolean;
   private readonly proxyUrl?: string;
+  private server: LightpandaServer | undefined;
 
   constructor(options: LightpandaRendererOptions = {}) {
     this.executable = options.executable ?? "lightpanda";
@@ -55,6 +67,18 @@ export class LightpandaRenderer implements Renderer {
     this.runner = options.runner ?? runCommand;
     this.customRunner = options.runner !== undefined;
     this.proxyUrl = options.proxyUrl;
+    this.server =
+      options.server === false
+        ? undefined
+        : (options.server ??
+          (this.customRunner
+            ? undefined
+            : new LightpandaServer(launchLightpandaServer(this.executable, this.flags()))));
+  }
+
+  /** Stops the long-lived server, if one is running. */
+  close(): void {
+    this.server?.close();
   }
 
   capabilities(): RendererCapabilities {
@@ -90,6 +114,19 @@ export class LightpandaRenderer implements Renderer {
     }
 
     const startedAt = performance.now();
+    if (!request.screenshot && this.server) {
+      const page = await this.renderOnServer(this.server, request);
+      if (page) {
+        return {
+          sourceUrl: request.url,
+          finalUrl: page.url,
+          title: extractTitle(page.html),
+          html: page.html,
+          renderer: this.name,
+          elapsedMs: performance.now() - startedAt,
+        };
+      }
+    }
     const htmlOutput = await this.fetch(request, "html");
     let screenshot: RenderResult["screenshot"];
 
@@ -109,12 +146,45 @@ export class LightpandaRenderer implements Renderer {
     };
   }
 
+  /** Returns undefined when the server cannot run, so the caller falls back to `fetch` mode. */
+  private async renderOnServer(server: LightpandaServer, request: RenderRequest) {
+    try {
+      return await server.render(request.url, this.waitFor(request), request.deadline.signal);
+    } catch (error) {
+      if (request.deadline.signal.aborted) throw request.deadline.signal.reason ?? error;
+      if (error instanceof LightpandaServerUnavailableError) {
+        console.warn("Lightpanda server mode is unavailable; using per-page fetch", error.cause);
+        this.server = undefined;
+        return;
+      }
+      if (error instanceof LightpandaPageError) {
+        throw new LightpandaRendererError("LIGHTPANDA_INVALID_RESULT", error.message, {
+          cause: error,
+        });
+      }
+      throw new LightpandaRendererError(
+        "LIGHTPANDA_RENDER_FAILED",
+        error instanceof Error ? error.message : "Lightpanda render failed",
+        { cause: error },
+      );
+    }
+  }
+
+  private waitFor(request: RenderRequest): number {
+    const remainingMs = Math.max(1, Math.floor(request.deadline.remainingMs));
+    return Math.min(request.waitForMs ?? this.waitMs, remainingMs);
+  }
+
+  private flags(): string[] {
+    return ["--block-private-networks", ...(this.proxyUrl ? ["--http-proxy", this.proxyUrl] : [])];
+  }
+
   private async fetch(
     request: RenderRequest,
     dump: "html" | "png",
   ): Promise<{ url: string; content: string }> {
     const remainingMs = Math.max(1, Math.floor(request.deadline.remainingMs));
-    const waitMs = Math.min(request.waitForMs ?? this.waitMs, remainingMs);
+    const waitMs = this.waitFor(request);
     const result = await this.runner(
       [
         this.executable,
@@ -127,8 +197,7 @@ export class LightpandaRenderer implements Renderer {
         String(waitMs),
         "--terminate-ms",
         String(remainingMs),
-        "--block-private-networks",
-        ...(this.proxyUrl ? ["--http-proxy", this.proxyUrl] : []),
+        ...this.flags(),
       ],
       request.deadline.signal,
     );
