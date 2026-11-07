@@ -2,9 +2,7 @@
   "version": "7",
   "dialect": "sqlite",
   "id": "7eb5a502-16e7-46ee-bf5b-8f65832ea14b",
-  "prevIds": [
-    "038bf046-cdfa-4010-8485-4377c1173e5a"
-  ],
+  "prevIds": ["038bf046-cdfa-4010-8485-4377c1173e5a"],
   "ddl": [
     {
       "name": "artifacts",
@@ -463,13 +461,9 @@
       "table": "jobs"
     },
     {
-      "columns": [
-        "job_id"
-      ],
+      "columns": ["job_id"],
       "tableTo": "jobs",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
@@ -478,13 +472,9 @@
       "table": "job_events"
     },
     {
-      "columns": [
-        "job_id"
-      ],
+      "columns": ["job_id"],
       "tableTo": "jobs",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
@@ -493,37 +483,28 @@
       "table": "job_items"
     },
     {
-      "columns": [
-        "job_id",
-        "sequence"
-      ],
+      "columns": ["job_id", "sequence"],
       "nameExplicit": false,
       "name": "job_events_pk",
       "entityType": "pks",
       "table": "job_events"
     },
     {
-      "columns": [
-        "key"
-      ],
+      "columns": ["key"],
       "nameExplicit": false,
       "name": "artifacts_pk",
       "table": "artifacts",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "job_items_pk",
       "table": "job_items",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "jobs_pk",
       "table": "jobs",

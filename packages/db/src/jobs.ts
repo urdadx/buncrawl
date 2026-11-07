@@ -400,24 +400,35 @@ async function finishJobItem(
     }
     throw new StaleJobLeaseError(input.itemId);
   }
-  await appendJobEvent(
-    db,
-    item.jobId,
-    "item_completed",
-    { itemId: item.id, index: item.index },
-    input.now,
-  );
+  const [job] = await db.select().from(jobs).where(eq(jobs.id, item.jobId)).limit(1);
+  // A map/crawl job's single kickoff item is internal; its pages are reported through progress.
+  if (job && !isDiscoveryJob(job.type))
+    await appendJobEvent(
+      db,
+      item.jobId,
+      "item_completed",
+      { itemId: item.id, index: item.index },
+      input.now,
+    );
   await refreshJobProgress(db, item.jobId, input.now);
   return item;
 }
 
-async function refreshJobProgress(db: Database, jobId: string, now: Date): Promise<void> {
+function isDiscoveryJob(type: string): boolean {
+  return type === "map" || type === "crawl";
+}
+
+async function countStates(
+  db: Database,
+  table: "job_items" | "crawl_frontier",
+  jobId: string,
+): Promise<JobProgress> {
   const rows = await queryRows<{ state: JobItemRecord["state"]; count: number }>(
     db,
-    sql`SELECT state, count(*) AS count FROM job_items WHERE job_id = ${jobId} GROUP BY state`,
+    sql`SELECT state, count(*) AS count FROM ${sql.raw(table)} WHERE job_id = ${jobId} GROUP BY state`,
   );
   const counts = new Map(rows.map((row) => [row.state, Number(row.count)]));
-  const progress: JobProgress = {
+  return {
     total: [...counts.values()].reduce((sum, count) => sum + count, 0),
     queued: counts.get("queued") ?? 0,
     running: counts.get("running") ?? 0,
@@ -425,12 +436,20 @@ async function refreshJobProgress(db: Database, jobId: string, now: Date): Promi
     failed: counts.get("failed") ?? 0,
     cancelled: counts.get("cancelled") ?? 0,
   };
+}
+
+async function refreshJobProgress(db: Database, jobId: string, now: Date): Promise<void> {
   const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId)).limit(1);
   if (!job) return;
+  // Job items decide when a job finishes; map/crawl jobs report page progress from their frontier.
+  const items = await countStates(db, "job_items", jobId);
+  const progress = isDiscoveryJob(job.type)
+    ? await countStates(db, "crawl_frontier", jobId)
+    : items;
 
   let state = job.state;
   let finishedAt = job.finishedAt;
-  if (progress.queued === 0 && progress.running === 0) {
+  if (items.queued === 0 && items.running === 0) {
     state =
       job.state === "failed"
         ? "failed"
@@ -443,7 +462,8 @@ async function refreshJobProgress(db: Database, jobId: string, now: Date): Promi
     .update(jobs)
     .set({ progress, state, finishedAt, updatedAt: now })
     .where(eq(jobs.id, jobId));
-  await appendJobEvent(db, jobId, "progress", { progress }, now);
+  if (JSON.stringify(job.progress) !== JSON.stringify(progress))
+    await appendJobEvent(db, jobId, "progress", { progress }, now);
   if (state !== job.state) await appendJobEvent(db, jobId, "state_changed", { state }, now);
 }
 
@@ -475,11 +495,21 @@ export async function appendJobEvent(
   payload: unknown,
   now: Date,
 ) {
+  // A terminal state_changed is always the job's last event: SSE clients and webhook receivers
+  // stop listening there, so anything appended later would never be seen.
   await db.run(sql`
     INSERT INTO job_events (job_id, sequence, type, payload_json, created_at)
-    SELECT ${jobId}, COALESCE(MAX(sequence), 0) + 1, ${type}, ${JSON.stringify(payload)}, ${now.getTime()}
-    FROM job_events
-    WHERE job_id = ${jobId}
+    SELECT ${jobId},
+      (SELECT COALESCE(MAX(sequence), 0) + 1 FROM job_events WHERE job_id = ${jobId}),
+      ${type}, ${JSON.stringify(payload)}, ${now.getTime()}
+    WHERE NOT EXISTS (
+      SELECT 1 FROM (
+        SELECT type, payload_json FROM job_events WHERE job_id = ${jobId}
+        ORDER BY sequence DESC LIMIT 1
+      ) AS latest
+      WHERE latest.type = 'state_changed'
+        AND json_extract(latest.payload_json, '$.state') IN ('completed', 'failed', 'cancelled')
+    )
   `);
 }
 

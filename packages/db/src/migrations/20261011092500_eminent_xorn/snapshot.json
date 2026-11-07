@@ -2,9 +2,7 @@
   "version": "7",
   "dialect": "sqlite",
   "id": "038bf046-cdfa-4010-8485-4377c1173e5a",
-  "prevIds": [
-    "00000000-0000-0000-0000-000000000000"
-  ],
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "ddl": [
     {
       "name": "artifacts",
@@ -81,9 +79,7 @@
       "table": "artifacts"
     },
     {
-      "columns": [
-        "key"
-      ],
+      "columns": ["key"],
       "nameExplicit": false,
       "name": "artifacts_pk",
       "table": "artifacts",

@@ -180,14 +180,7 @@ export async function migrateDb(db: Database): Promise<void> {
       WHERE job_id = OLD.job_id AND origin = OLD.origin;
     END
   `);
-  await db.run(sql`
-    CREATE TRIGGER IF NOT EXISTS crawl_redirect_dedup AFTER UPDATE OF state ON crawl_frontier
-    WHEN NEW.state = 'completed' AND NEW.final_url IS NOT NULL AND NEW.final_url != NEW.url
-    BEGIN
-      INSERT INTO crawl_frontier (job_id, url, origin, depth, state, created_at, updated_at)
-      VALUES (NEW.job_id, NEW.final_url, NEW.final_origin, NEW.depth, 'completed', NEW.updated_at, NEW.updated_at)
-      ON CONFLICT(job_id, url) DO UPDATE SET state = 'completed', updated_at = NEW.updated_at
-        WHERE state = 'queued';
-    END
-  `);
+  // Redirect targets are now deduplicated in enqueueCrawlUrl/finishCrawlUrl; the old trigger
+  // inserted document-less "completed" rows that bypassed the maxPages budget.
+  await db.run(sql`DROP TRIGGER IF EXISTS crawl_redirect_dedup`);
 }

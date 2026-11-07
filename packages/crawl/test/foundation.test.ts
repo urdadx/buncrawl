@@ -104,13 +104,35 @@ test("bounds sitemap indexes, deduplicates cycles and filters off-origin URLs", 
   expect(() =>
     parseSitemap("<urlset><url><loc>a</loc></url><url><loc>b</loc></url></urlset>", 1),
   ).toThrow();
-  await expect(
-    discoverSitemapUrls(
+  // Limits truncate discovery instead of failing it.
+  expect(
+    await discoverSitemapUrls(
       ["https://site.example/sitemap.xml"],
       { url: "https://site.example" },
       { ...options, maxDepth: 1, maxSitemaps: 1 },
     ),
-  ).rejects.toThrow("Sitemap file limit exceeded");
+  ).toEqual([]);
+});
+
+test("treats www and the bare domain as the same site", () => {
+  const apex = { url: "https://site.example" };
+  expect(withinCrawlScope("https://www.site.example/about", apex)).toBe(true);
+  expect(withinCrawlScope("https://site.example/about", { url: "https://www.site.example" })).toBe(
+    true,
+  );
+  expect(withinCrawlScope("https://blog.site.example/", apex)).toBe(false);
+  expect(withinCrawlScope("https://blog.site.example/", { ...apex, includeSubdomains: true })).toBe(
+    true,
+  );
+  expect(withinCrawlScope("https://www.other.example/", apex)).toBe(false);
+  expect(withinCrawlScope("https://wwwsite.example/", apex)).toBe(false);
+  expect(withinCrawlScope("http://www.site.example/", apex)).toBe(false);
+  expect(
+    withinCrawlScope("https://www.site.example/blog/post", {
+      url: "https://site.example/docs",
+      pathPrefix: true,
+    }),
+  ).toBe(false);
 });
 
 test("checks robots before redirects, enforces scope, and caps fetched page bytes", async () => {

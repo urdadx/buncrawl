@@ -24,6 +24,7 @@ import {
   claimJobItem,
   completeJobItem,
   crawlLimitsExhausted,
+  discardDuplicateCrawlUrl,
   enqueueCrawlUrl,
   failJob,
   failJobItem,
@@ -274,11 +275,18 @@ export class DiscoveryWorker {
       const sitemapSeeds = robots.sitemaps.length
         ? robots.sitemaps
         : [new URL("/sitemap.xml", root).href];
-      const sitemapUrls = await discoverSitemapUrls(sitemapSeeds, scope, {
-        ...fetchOptions,
-        maxUrls: limits.maxPages,
-        maxSitemaps: 20,
-      });
+      let sitemapUrls: string[] = [];
+      try {
+        sitemapUrls = await discoverSitemapUrls(sitemapSeeds, scope, {
+          ...fetchOptions,
+          maxUrls: limits.maxPages,
+          maxSitemaps: 20,
+        });
+      } catch (error) {
+        // Sitemaps only seed the frontier; link discovery from the root page still works.
+        if (controller.signal.aborted) throw error;
+        console.warn("Sitemap discovery failed; continuing with link discovery", error);
+      }
       for (const url of sitemapUrls) {
         if (controller.signal.aborted || this.stopped) break;
         const origin = new URL(url).origin;
@@ -425,6 +433,7 @@ export class DiscoveryWorker {
         fetchImpl: this.options.fetchImpl,
         resolver: this.options.resolver,
       });
+      if (await discardDuplicateCrawlUrl(this.options.db, lease, page.finalUrl)) return;
       if (page.statusCode >= 400) throw new Error(`Page returned HTTP ${page.statusCode}`);
       if (request.type === "crawl") {
         const options = request.scrapeOptions;

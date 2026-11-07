@@ -88,12 +88,16 @@ export async function enqueueCrawlUrl(
   }
 
   await scheduleCrawlHost(db, jobId, entry.origin);
+  const twin = siteTwinUrl(entry.url);
 
+  // A page is already known if it, or its www/bare-domain twin, is queued or was reached by a redirect.
   const result = await db.run(sql`
     INSERT OR IGNORE INTO crawl_frontier (job_id, url, origin, depth, state, created_at, updated_at)
     SELECT ${jobId}, ${entry.url}, ${entry.origin}, ${entry.depth}, 'queued', ${now.getTime()}, ${now.getTime()}
     WHERE EXISTS (SELECT 1 FROM jobs WHERE id = ${jobId} AND state IN ('queued', 'running')
       AND created_at + ${limits.maxElapsedMs} > ${now.getTime()})
+      AND NOT EXISTS (SELECT 1 FROM crawl_frontier WHERE job_id = ${jobId}
+        AND (url = ${twin} OR final_url IN (${entry.url}, ${twin})))
       AND (SELECT count(*) FROM crawl_frontier WHERE job_id = ${jobId}) < ${limits.maxPages}
       AND (SELECT coalesce(sum(byte_size + reserved_bytes), 0) FROM crawl_frontier WHERE job_id = ${jobId}) < ${limits.maxBytes}
   `);
@@ -204,7 +208,53 @@ export async function finishCrawlUrl(
     })
     .where(activeCrawlLease(lease, now))
     .returning({ url: crawlFrontier.url });
+  if (row && result.state === "completed" && result.finalUrl && result.finalUrl !== lease.url) {
+    // The redirect target was just fetched; drop its queued copy instead of fetching it again.
+    await db.run(sql`DELETE FROM crawl_frontier WHERE job_id = ${lease.jobId} AND state = 'queued'
+      AND url IN (${result.finalUrl}, ${siteTwinUrl(result.finalUrl)})`);
+  }
   return Boolean(row);
+}
+
+/**
+ * Drops a leased page whose redirect lands on a page another row already fetched or is fetching,
+ * so the same document is not scraped twice and the duplicate does not use a maxPages slot.
+ */
+export async function discardDuplicateCrawlUrl(
+  db: Database,
+  lease: CrawlLease,
+  finalUrl: string,
+  now = new Date(),
+): Promise<boolean> {
+  if (finalUrl === lease.url) return false;
+  const twin = siteTwinUrl(finalUrl);
+  // Leaving 'running' first releases the host slot through the crawl_frontier_released trigger.
+  const [row] = await db
+    .update(crawlFrontier)
+    .set({
+      state: "cancelled",
+      leaseOwner: null,
+      leaseExpiresAt: null,
+      reservedBytes: 0,
+      updatedAt: now,
+    })
+    .where(sql`${activeCrawlLease(lease, now)} AND EXISTS (
+    SELECT 1 FROM crawl_frontier other WHERE other.job_id = ${lease.jobId} AND other.url != ${lease.url}
+      AND other.state IN ('running', 'completed')
+      AND (other.url IN (${finalUrl}, ${twin}) OR other.final_url IN (${finalUrl}, ${twin}))
+  )`)
+    .returning({ url: crawlFrontier.url });
+  if (!row) return false;
+  await db.run(sql`DELETE FROM crawl_frontier WHERE job_id = ${lease.jobId} AND url = ${lease.url}
+    AND state = 'cancelled'`);
+  return true;
+}
+
+/** The same URL on the www/bare-domain counterpart host, which crawl scope treats as one site. */
+export function siteTwinUrl(input: string): string {
+  const url = new URL(input);
+  url.hostname = url.hostname.startsWith("www.") ? url.hostname.slice(4) : `www.${url.hostname}`;
+  return url.href;
 }
 
 export async function recoverCrawlLeases(db: Database, now = new Date()): Promise<number> {

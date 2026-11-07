@@ -6,6 +6,7 @@ import {
   enqueueJob,
   getCrawlFrontier,
   getJob,
+  getJobEvents,
   migrateDb,
 } from "@buncrawl/db";
 import { DiscoveryWorker } from "@buncrawl/jobs";
@@ -320,7 +321,9 @@ test("deduplicates sitemap URLs that are already redirect targets and pages map 
       fetched.push(url);
       if (url.endsWith("robots.txt")) return new Response("User-agent: *");
       if (url.endsWith("sitemap.xml"))
-        return new Response(`<urlset><url><loc>${origin}/canonical</loc></url></urlset>`);
+        return new Response(
+          `<urlset><url><loc>${origin}/canonical</loc></url><url><loc>${origin}/other</loc></url></urlset>`,
+        );
       if (url === `${origin}/`)
         return new Response(null, { status: 302, headers: { location: "/canonical" } });
       return new Response("ok", { headers: { "content-type": "text/html" } });
@@ -330,7 +333,7 @@ test("deduplicates sitemap URLs that are already redirect targets and pages map 
     const submitted = await handler(
       new Request(`${base}/map`, {
         method: "POST",
-        body: JSON.stringify({ url: origin, maxUrls: 2, maxDepth: 0 }),
+        body: JSON.stringify({ url: origin, maxUrls: 3, maxDepth: 0 }),
       }),
     );
     const { jobId } = (await submitted.json()) as { jobId: string };
@@ -340,9 +343,12 @@ test("deduplicates sitemap URLs that are already redirect targets and pages map 
       await handler(new Request(`${base}/map/${jobId}?limit=1`), jobId)
     ).json()) as { next?: string; urls: string[] };
     const second = (await (await handler(new Request(first.next!), jobId)).json()) as {
+      next?: string;
       urls: string[];
     };
-    expect([...new Set([...first.urls, ...second.urls])]).toEqual([`${origin}/canonical`]);
+    // The redirect target's queued copy is dropped, so each URL appears exactly once.
+    expect([...first.urls, ...second.urls]).toEqual([`${origin}/canonical`, `${origin}/other`]);
+    expect(second.next).toBeUndefined();
     expect(fetched.filter((url) => url === `${origin}/canonical`)).toHaveLength(1);
   } finally {
     await worker.stop();
@@ -394,6 +400,152 @@ test("rejects invalid discovery requests and never follows an out-of-scope redir
     expect(status.progress.failed).toBe(1);
     expect(status.items[0]?.error?.code).toBe("OUT_OF_SCOPE");
     expect(fetched).not.toContain("https://other.example/private");
+  } finally {
+    await worker.stop();
+  }
+});
+
+test("follows a bare-domain redirect to www and survives an oversized sitemap index", async () => {
+  // Reproduces firecrawl.dev (308 to www) combined with ashesi.edu.gh (28 Yoast child sitemaps).
+  const db = createDb({ DATABASE_URL: ":memory:" });
+  await migrateDb(db);
+  const handler = createDiscoveryHandler(db, "map", async () => {});
+  const www = "https://www.site.example";
+  const children = Array.from({ length: 28 }, (_, i) => `${origin}/post-sitemap${i}.xml`);
+  const worker = new DiscoveryWorker({
+    db,
+    dispatch,
+    pollMs: 20,
+    resolver: async () => ["8.8.8.8"],
+    fetchImpl: async (input) => {
+      const url = String(input);
+      if (url.endsWith("/robots.txt"))
+        return new Response(`User-agent: *\nSitemap: ${origin}/sitemap_index.xml`);
+      if (url.endsWith("/sitemap_index.xml"))
+        return new Response(
+          `<sitemapindex>${children.map((loc) => `<sitemap><loc>${loc}</loc></sitemap>`).join("")}</sitemapindex>`,
+        );
+      const child = /post-sitemap(\d+)\.xml$/.exec(url);
+      if (child)
+        return new Response(`<urlset><url><loc>${www}/post-${child[1]}</loc></url></urlset>`);
+      if (url === `${origin}/`)
+        return new Response(null, { status: 308, headers: { location: `${www}/` } });
+      if (url === `${www}/`)
+        return new Response('<a href="/about">about</a>', {
+          headers: { "content-type": "text/html" },
+        });
+      return new Response("ok", { headers: { "content-type": "text/html" } });
+    },
+  });
+  try {
+    const submitted = await handler(
+      new Request(`${base}/map`, {
+        method: "POST",
+        body: JSON.stringify({ url: origin, maxUrls: 100, maxDepth: 2 }),
+      }),
+    );
+    const { jobId } = (await submitted.json()) as { jobId: string };
+    await worker.start();
+    await until(async () => (await getJob(db, jobId))?.state === "completed");
+    const status = (await (
+      await handler(new Request(`${base}/map/${jobId}?limit=100`), jobId)
+    ).json()) as { urls: string[]; error?: unknown };
+    expect(status.error).toBeUndefined();
+    expect(status.urls).toEqual(
+      expect.arrayContaining([`${www}/`, `${www}/about`, `${www}/post-0`]),
+    );
+    expect(status.urls).not.toContain(`${www}/post-27`);
+  } finally {
+    await worker.stop();
+  }
+});
+
+test("crawls each www/bare-domain page once and never exceeds maxPages", async () => {
+  // Reproduces firecrawl.dev: the bare domain 308s to www and links/sitemaps mix both forms.
+  const db = createDb({ DATABASE_URL: ":memory:" });
+  await migrateDb(db);
+  const handler = createDiscoveryHandler(db, "crawl", async () => {});
+  const www = "https://www.site.example";
+  const scrapes: string[] = [];
+  const worker = new DiscoveryWorker({
+    db,
+    dispatch,
+    pollMs: 20,
+    pageConcurrency: 2,
+    resolver: async () => ["8.8.8.8"],
+    fetchImpl: async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/robots.txt")
+        return new Response(`User-agent: *\nSitemap: ${origin}/sitemap.xml`);
+      if (url.pathname === "/sitemap.xml")
+        return new Response(
+          `<urlset>${[
+            `${origin}/pricing`,
+            `${www}/pricing`,
+            `${origin}/blog`,
+            `${www}/blog`,
+            `${www}/about`,
+            `${origin}/menu-item`,
+            `${www}/extra-1`,
+            `${www}/extra-2`,
+          ]
+            .map((loc) => `<url><loc>${loc}</loc></url>`)
+            .join("")}</urlset>`,
+        );
+      // A sitemap entry that redirects to an already-crawled page, like WordPress menu items.
+      if (url.pathname === "/menu-item")
+        return new Response(null, { status: 301, headers: { location: `${www}/` } });
+      if (url.origin === origin)
+        return new Response(null, { status: 308, headers: { location: `${www}${url.pathname}` } });
+      return new Response('<a href="/about">about</a><a href="/pricing">pricing</a>', {
+        headers: { "content-type": "text/html" },
+      });
+    },
+    scrapeItem: async (request, _signal, fetched) => {
+      scrapes.push(fetched.finalUrl);
+      return {
+        success: true,
+        data: {
+          markdown: `# ${fetched.finalUrl}`,
+          metadata: {
+            sourceURL: request.url,
+            finalURL: fetched.finalUrl,
+            statusCode: 200,
+            renderer: "fetch",
+          },
+        },
+      };
+    },
+  });
+  try {
+    const submitted = await handler(
+      new Request(`${base}/crawl`, {
+        method: "POST",
+        body: JSON.stringify({ url: origin, maxPages: 4, maxDepth: 1 }),
+      }),
+    );
+    const { jobId } = (await submitted.json()) as { jobId: string };
+    await worker.start();
+    await until(async () => (await getJob(db, jobId))?.state === "completed");
+    const result = (await (
+      await handler(new Request(`${base}/crawl/${jobId}?limit=100`), jobId)
+    ).json()) as {
+      progress: { total: number; succeeded: number };
+      items: { state: string; document?: unknown }[];
+    };
+    expect(result.progress.total).toBeLessThanOrEqual(4);
+    expect(result.progress.succeeded).toBe(4);
+    expect(result.items.filter((item) => item.state === "completed" && !item.document)).toEqual([]);
+    expect(scrapes).toHaveLength(4);
+    expect(new Set(scrapes).size).toBe(4);
+    expect(scrapes.every((url) => url.startsWith(www))).toBe(true);
+
+    // The terminal state is the last event, and the last progress matches the final status.
+    const events = await getJobEvents(db, jobId, 0, 1000);
+    expect(events.at(-1)).toMatchObject({ type: "state_changed", payload: { state: "completed" } });
+    expect(events.some((event) => event.type === "item_completed")).toBe(false);
+    const progress = events.filter((event) => event.type === "progress");
+    expect(progress.at(-1)?.payload).toEqual({ progress: result.progress });
   } finally {
     await worker.stop();
   }

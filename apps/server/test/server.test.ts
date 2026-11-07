@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 
-import { SERVER_IDLE_TIMEOUT_SECONDS } from "./server-config";
-import { createScrapeHandler } from "./routes/v1/scrape";
+import { SERVER_IDLE_TIMEOUT_SECONDS } from "../src/server-config";
+import { createScrapeHandler } from "../src/routes/v1/scrape";
 
 const RESPONSE_DELAY_MS = 10_250;
 
@@ -36,18 +36,14 @@ afterAll(async () => {
 });
 
 describe("server request timeout", () => {
-  test(
-    "keeps a scrape connection open for longer than Bun's 10-second default",
-    async () => {
-      const response = await fetch(new URL("/v1/scrape", server.url), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url: "https://example.com" }),
-      });
+  test("keeps a scrape connection open for longer than Bun's 10-second default", async () => {
+    const response = await fetch(new URL("/v1/scrape", server.url), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com" }),
+    });
 
-      expect(response.status).toBe(200);
-      expect(await response.json()).toMatchObject({ success: true });
-    },
-    15_000,
-  );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ success: true });
+  }, 15_000);
 });

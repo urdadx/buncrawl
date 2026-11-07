@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { FetchPageOptions, FetchPageResult } from "@buncrawl/fetcher";
-import { RendererChain, type Renderer, type RenderRequest, type RenderResult } from "@buncrawl/renderer";
+import {
+  RendererChain,
+  type Renderer,
+  type RenderRequest,
+  type RenderResult,
+} from "@buncrawl/renderer";
 
 import { scrape } from "./scrape";
 
@@ -196,9 +201,7 @@ describe("scrape", () => {
     if (!response.success) return;
     expect(response.data.rawHtml).toContain('src="https://padyna.com/_astro/app.js"');
     expect(response.data.rawHtml).toContain('href="https://padyna.com/_astro/site.css"');
-    expect(response.data.rawHtml).toContain(
-      'src="https://padyna.com/articles/images/cover.jpg"',
-    );
+    expect(response.data.rawHtml).toContain('src="https://padyna.com/articles/images/cover.jpg"');
   });
 
   test("preserves fetched content when automatic rendering fails", async () => {

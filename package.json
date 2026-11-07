@@ -23,7 +23,8 @@
     "docker:logs": "docker compose logs -f",
     "env:generate": "varlock codegen --path ./apps/web/ && varlock codegen --path ./apps/server/ && varlock codegen --path ./packages/db/",
     "postinstall": "varlock codegen --path ./apps/web/ && varlock codegen --path ./apps/server/ && varlock codegen --path ./packages/db/",
-    "check": "oxlint && oxfmt --write"
+    "check": "oxlint && oxfmt --write",
+    "bench:scrape": "bun packages/scrape/bench/scrape.bench.ts"
   },
   "dependencies": {
     "valibot": "catalog:"

@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  appendJobEvent,
   claimJobItem,
   completeJobItem,
   createDb,
+  enqueueCrawlUrl,
   enqueueJob,
+  failJob,
   failJobItem,
   getJob,
   getJobEvents,
@@ -220,5 +223,77 @@ describe("job repository", () => {
     await expect(
       completeJobItem(db, claimed.id, "worker-a", claimed.leaseVersion, { stale: true }),
     ).rejects.toBeInstanceOf(StaleJobLeaseError);
+  });
+});
+
+describe("job event ordering", () => {
+  const terminalLast = async (db: Awaited<ReturnType<typeof setup>>["db"], jobId: string) => {
+    const events = await getJobEvents(db, jobId);
+    return { events, last: events.at(-1) };
+  };
+
+  test("never appends events after a terminal state_changed", async () => {
+    const { db, job } = await setup();
+    const claimed = (await claimJobItem(db, { workerId: "worker", leaseMs: 10_000 }))!;
+    await completeJobItem(db, claimed.id, "worker", claimed.leaseVersion, { ok: true });
+    const before = await getJobEvents(db, job.id);
+    expect(before.at(-1)).toMatchObject({ type: "state_changed", payload: { state: "completed" } });
+
+    await appendJobEvent(db, job.id, "progress", { progress: {} }, new Date());
+    await appendJobEvent(db, job.id, "state_changed", { state: "failed" }, new Date());
+    expect(await getJobEvents(db, job.id)).toEqual(before);
+  });
+
+  test("keeps the final progress written between the terminal commit and its event", async () => {
+    const { db, job } = await setup();
+    // requestJobCancellation commits "cancelled" before appending progress and state_changed.
+    await requestJobCancellation(db, job.id);
+    const types = (await getJobEvents(db, job.id)).map((event) => [event.type, event.payload]);
+    expect(types.slice(-2)).toEqual([
+      ["progress", { progress: expect.objectContaining({ cancelled: 1 }) }],
+      ["state_changed", { state: "cancelled" }],
+    ]);
+  });
+
+  test("only emits progress when it changes", async () => {
+    const { db, job } = await setup(["https://one.example", "https://two.example"]);
+    const claimed = (await claimJobItem(db, { workerId: "worker", leaseMs: 10_000 }))!;
+    await completeJobItem(db, claimed.id, "worker", claimed.leaseVersion, { ok: true });
+    const progress = (await getJobEvents(db, job.id))
+      .filter((event) => event.type === "progress")
+      .map((event) => JSON.stringify(event.payload));
+    expect(new Set(progress).size).toBe(progress.length);
+  });
+
+  test("crawl jobs report frontier progress and end on their terminal state", async () => {
+    const db = createDb({ DATABASE_URL: ":memory:" });
+    await migrateDb(db);
+    const { job } = await enqueueJob(db, {
+      submission: { type: "crawl", url: "https://site.example" },
+      limits,
+    });
+    const crawlLimits = { maxDepth: 2, maxPages: 10, maxBytes: 1000, maxElapsedMs: 60_000 };
+    for (const path of ["/", "/a"])
+      await enqueueCrawlUrl(
+        db,
+        job.id,
+        { url: `https://site.example${path}`, origin: "https://site.example", depth: 0 },
+        crawlLimits,
+      );
+    const kickoff = (await claimJobItem(db, { workerId: "worker", leaseMs: 10_000 }))!;
+    await failJob(db, job.id, { code: "DISCOVERY_FAILED", message: "boom", retryable: false });
+    await failJobItem(db, kickoff.id, "worker", kickoff.leaseVersion, {
+      code: "DISCOVERY_FAILED",
+      message: "boom",
+      retryable: false,
+    });
+
+    const { events, last } = await terminalLast(db, job.id);
+    expect(last).toMatchObject({ type: "state_changed", payload: { state: "failed" } });
+    // The internal kickoff item is not a user-visible item.
+    expect(events.some((event) => event.type === "item_completed")).toBe(false);
+    // Progress counts pages (2 queued), never the single kickoff item.
+    for (const event of events.filter((event) => event.type === "progress"))
+      expect((event.payload as { progress: { total: number } }).progress.total).not.toBe(1);
   });
 });

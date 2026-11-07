@@ -120,9 +120,10 @@ export async function discoverSitemapUrls(
     options.deadline.throwIfExpired();
     const batch: string[] = [];
 
+    // Limits truncate discovery rather than failing it: sitemaps only seed the frontier.
     for (const url of current) {
       if (!withinCrawlScope(url, sitemapScope) || visited.has(url)) continue;
-      if (visited.size >= maxSitemaps) throw new Error("Sitemap file limit exceeded");
+      if (visited.size >= maxSitemaps) break;
       visited.add(url);
       batch.push(url);
     }
@@ -177,8 +178,7 @@ export async function discoverSitemapUrls(
     for (const result of results) {
       if (!result) continue;
       if (result.type === "index") {
-        if (depth >= maxDepth && result.locations.length)
-          throw new Error("Sitemap nesting limit exceeded");
+        if (depth >= maxDepth) continue;
         for (const value of result.locations) {
           const url = canonicalCrawlUrl(value);
           if (url && withinCrawlScope(url, sitemapScope) && !visited.has(url)) next.push(url);

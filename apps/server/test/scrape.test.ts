@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { createScrapeHandler } from "./scrape";
+import { createScrapeHandler } from "../src/routes/v1/scrape";
 
 describe("POST /v1/scrape", () => {
   test("validates the request body", async () => {

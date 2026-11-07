@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   claimCrawlUrl,
   createDb,
+  discardDuplicateCrawlUrl,
   enqueueCrawlUrl,
   enqueueJob,
   finishCrawlUrl,
@@ -123,10 +124,58 @@ test("recovers expired host slots, fences old workers and deduplicates redirect 
       new Date(now.getTime() + 104),
     ),
   ).toBe(true);
-  expect((await getCrawlFrontier(db, id)).map((row) => [row.url, row.state])).toEqual([
-    [`${origin}/old`, "completed"],
-    [`${origin}/new`, "completed"],
-  ]);
+  // The queued redirect target is dropped rather than kept as a document-less "completed" row.
+  expect((await getCrawlFrontier(db, id)).map((row) => [row.url, row.state, row.finalUrl])).toEqual(
+    [[`${origin}/old`, "completed", `${origin}/new`]],
+  );
+  expect(await enqueueCrawlUrl(db, id, { url: `${origin}/new`, origin, depth: 1 }, limits)).toBe(
+    false,
+  );
+});
+
+test("treats www and bare-domain URLs as one frontier entry", async () => {
+  const { db, id } = await setup();
+  const apex = "https://site.example";
+  const www = "https://www.site.example";
+  expect(await enqueueCrawlUrl(db, id, { url: `${apex}/a`, origin: apex, depth: 0 }, limits)).toBe(
+    true,
+  );
+  expect(await enqueueCrawlUrl(db, id, { url: `${www}/a`, origin: www, depth: 0 }, limits)).toBe(
+    false,
+  );
+  expect(await enqueueCrawlUrl(db, id, { url: `${www}/b`, origin: www, depth: 0 }, limits)).toBe(
+    true,
+  );
+  expect(await enqueueCrawlUrl(db, id, { url: `${apex}/b`, origin: apex, depth: 0 }, limits)).toBe(
+    false,
+  );
+  expect((await getCrawlFrontier(db, id)).map((row) => row.url)).toEqual([`${apex}/a`, `${www}/b`]);
+});
+
+test("a bare-domain redirect to www consumes one page and dedupes both forms", async () => {
+  const { db, id } = await setup();
+  const apex = "https://site.example";
+  const www = "https://www.site.example";
+  await enqueueCrawlUrl(db, id, { url: `${apex}/`, origin: apex, depth: 0 }, limits);
+  await enqueueCrawlUrl(db, id, { url: `${apex}/about`, origin: apex, depth: 0 }, limits);
+  const lease = (await claimCrawlUrl(db, id, "worker", 1000, limits))!;
+  expect(lease.url).toBe(`${apex}/`);
+  expect(
+    await finishCrawlUrl(db, lease, { state: "completed", byteSize: 1, finalUrl: `${www}/` }),
+  ).toBe(true);
+  // Neither form of the redirect target can be queued again.
+  for (const url of [`${www}/`, `${apex}/`])
+    expect(
+      await enqueueCrawlUrl(db, id, { url, origin: new URL(url).origin, depth: 1 }, limits),
+    ).toBe(false);
+  // Only real pages count toward maxPages (3): one slot is still free.
+  expect(await enqueueCrawlUrl(db, id, { url: `${www}/c`, origin: www, depth: 1 }, limits)).toBe(
+    true,
+  );
+  expect(await enqueueCrawlUrl(db, id, { url: `${www}/d`, origin: www, depth: 1 }, limits)).toBe(
+    false,
+  );
+  expect(await getCrawlFrontier(db, id)).toHaveLength(limits.maxPages);
 });
 
 test("reserves the global byte budget across hosts and enforces the robots delay", async () => {
@@ -170,4 +219,28 @@ test("does not claim another page on a host before its delay expires", async () 
   ).toMatchObject({ url: `${origin}/b` });
   expect((await getCrawlHost(db, id, origin))?.active).toBe(2);
   expect(first.url).toBe(`${origin}/a`);
+});
+
+test("discards a page whose redirect lands on an already-crawled page and frees its slot", async () => {
+  const { db, id } = await setup();
+  const origin = "https://site.example";
+  await enqueueCrawlUrl(db, id, { url: `${origin}/`, origin, depth: 0 }, limits);
+  await enqueueCrawlUrl(db, id, { url: `${origin}/menu-item`, origin, depth: 0 }, limits);
+  const home = (await claimCrawlUrl(db, id, "worker", 1000, limits))!;
+  await finishCrawlUrl(db, home, { state: "completed", byteSize: 1, finalUrl: `${origin}/` });
+  const alias = (await claimCrawlUrl(db, id, "worker", 1000, limits))!;
+  expect(alias.url).toBe(`${origin}/menu-item`);
+  // Not a duplicate when the redirect lands somewhere new.
+  expect(await discardDuplicateCrawlUrl(db, alias, `${origin}/fresh`)).toBe(false);
+  expect(await discardDuplicateCrawlUrl(db, alias, `https://www.site.example/`)).toBe(true);
+  expect((await getCrawlFrontier(db, id)).map((row) => row.url)).toEqual([`${origin}/`]);
+  expect((await getCrawlHost(db, id, origin))?.active).toBe(0);
+  // A discarded lease cannot be finished afterwards.
+  expect(await finishCrawlUrl(db, alias, { state: "completed", byteSize: 1 })).toBe(false);
+  expect(await enqueueCrawlUrl(db, id, { url: `${origin}/b`, origin, depth: 0 }, limits)).toBe(
+    true,
+  );
+  expect(await enqueueCrawlUrl(db, id, { url: `${origin}/c`, origin, depth: 0 }, limits)).toBe(
+    true,
+  );
 });

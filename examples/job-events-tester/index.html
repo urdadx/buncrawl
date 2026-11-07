@@ -1,0 +1,1440 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Buncrawl · Job event tester</title>
+    <style>
+      :root {
+        --bg: #0c1220;
+        --panel: #172238;
+        --inset: #0b1425;
+        --border: #293a56;
+        --border-strong: #40536e;
+        --text: #e9edf4;
+        --muted: #aebbd2;
+        --accent: #51b8ff;
+        --accent-text: #8cdeff;
+        --good: #97e9b0;
+        --bad: #ff9999;
+        --warn: #ffd27a;
+        --secondary: #334864;
+        font:
+          15px/1.5 system-ui,
+          sans-serif;
+        color: var(--text);
+        background: var(--bg);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        max-width: 1100px;
+        margin: 32px auto;
+        padding: 0 16px;
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 1.7rem;
+      }
+      h2 {
+        font-size: 1.1rem;
+        margin: 0 0 12px;
+      }
+      h3 {
+        font-size: 0.95rem;
+        margin: 0 0 8px;
+      }
+      p {
+        color: var(--muted);
+        margin: 0 0 8px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+      .card {
+        padding: 20px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        margin-bottom: 16px;
+        min-width: 0;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin: 10px 0 5px;
+      }
+      input,
+      select,
+      button {
+        font: inherit;
+        border-radius: 7px;
+        padding: 8px 12px;
+      }
+      input:not([type="checkbox"]):not([type="radio"]),
+      select {
+        width: 100%;
+        background: #0d1829;
+        border: 1px solid var(--border-strong);
+        color: inherit;
+      }
+      input:focus-visible,
+      select:focus-visible,
+      button:focus-visible,
+      [role="tab"]:focus-visible {
+        outline: 2px solid var(--accent-text);
+        outline-offset: 1px;
+      }
+      button {
+        background: var(--accent);
+        border: 0;
+        color: #081321;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: var(--secondary);
+        color: var(--text);
+      }
+      button.danger {
+        background: #5a2a35;
+        color: #ffd6dc;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      button.small {
+        padding: 4px 10px;
+        font-size: 0.85rem;
+      }
+      .full {
+        width: 100%;
+        margin-top: 14px;
+      }
+      small,
+      .hint {
+        display: block;
+        color: var(--muted);
+        font-size: 0.85rem;
+        margin-top: 5px;
+      }
+      code {
+        color: var(--accent-text);
+        overflow-wrap: anywhere;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+      }
+      .row > .grow {
+        flex: 1 1 180px;
+      }
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 10px;
+        align-items: end;
+      }
+      .controls label {
+        margin-top: 0;
+      }
+      .check {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 500;
+        margin: 4px 14px 4px 0;
+        cursor: pointer;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        background: var(--inset);
+        border: 1px solid var(--border);
+        font-size: 0.85rem;
+        white-space: nowrap;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--muted);
+      }
+      .dot.open {
+        background: var(--good);
+      }
+      .dot.connecting {
+        background: var(--warn);
+      }
+      .dot.error {
+        background: var(--bad);
+      }
+      .stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 12px 0;
+      }
+      .stats strong {
+        color: var(--accent-text);
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+      .chip {
+        background: var(--inset);
+        border: 1px solid var(--border-strong);
+        color: var(--text);
+        font-weight: 500;
+        font-size: 0.82rem;
+        padding: 3px 10px;
+        border-radius: 999px;
+      }
+      .chip[aria-pressed="false"] {
+        opacity: 0.45;
+        text-decoration: line-through;
+      }
+      /* Tabs */
+      [role="tablist"] {
+        display: flex;
+        gap: 4px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 16px;
+      }
+      [role="tab"] {
+        background: none;
+        color: var(--muted);
+        border-radius: 8px 8px 0 0;
+        padding: 10px 18px;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+      }
+      [role="tab"][aria-selected="true"] {
+        color: var(--text);
+        border-bottom-color: var(--accent);
+        background: var(--panel);
+      }
+      .badge {
+        display: inline-block;
+        min-width: 20px;
+        padding: 0 6px;
+        margin-left: 6px;
+        border-radius: 999px;
+        background: var(--secondary);
+        color: var(--text);
+        font-size: 0.75rem;
+        text-align: center;
+      }
+      /* Feeds */
+      .feed {
+        height: 440px;
+        overflow: auto;
+        background: var(--inset);
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        padding: 4px 8px;
+      }
+      .feed:empty::before {
+        content: attr(data-empty);
+        display: block;
+        color: var(--muted);
+        padding: 12px 4px;
+      }
+      .entry {
+        border-bottom: 1px solid #22304a;
+        padding: 6px 2px;
+        font:
+          12px/1.45 ui-monospace,
+          monospace;
+      }
+      .entry:last-child {
+        border-bottom: 0;
+      }
+      .entry > summary,
+      .entry > .line {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+        align-items: baseline;
+        cursor: pointer;
+        color: var(--text);
+      }
+      .entry > .line {
+        cursor: default;
+      }
+      .entry .seq {
+        color: var(--muted);
+        min-width: 38px;
+      }
+      .entry .type {
+        color: var(--accent-text);
+        font-weight: bold;
+      }
+      .entry .time {
+        margin-left: auto;
+        color: var(--muted);
+      }
+      .entry.system .type {
+        color: var(--warn);
+      }
+      .entry.heartbeat {
+        color: var(--muted);
+        padding: 2px;
+      }
+      .flag {
+        padding: 0 6px;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 11px;
+      }
+      .flag.bad {
+        background: #5a2a35;
+        color: #ffd6dc;
+      }
+      .flag.warn {
+        background: #5a4a22;
+        color: #ffe9b8;
+      }
+      .flag.good {
+        background: #1f4a33;
+        color: #c9f5d6;
+      }
+      .flag.muted {
+        background: var(--secondary);
+        color: var(--text);
+      }
+      .attempts {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 8px 0;
+      }
+      .attempts th,
+      .attempts td {
+        text-align: left;
+        padding: 3px 8px 3px 0;
+        border-bottom: 1px solid #22304a;
+        font-weight: normal;
+      }
+      .attempts th {
+        color: var(--muted);
+      }
+      .bad {
+        color: var(--bad);
+      }
+      .good {
+        color: var(--good);
+      }
+      .warn {
+        color: var(--warn);
+      }
+      .notice {
+        padding: 8px 12px;
+        border-radius: 7px;
+        background: var(--inset);
+        border: 1px solid var(--border);
+        margin-top: 10px;
+        font-size: 0.9rem;
+      }
+      .notice:empty {
+        display: none;
+      }
+      progress {
+        width: 100%;
+        height: 12px;
+        accent-color: var(--accent);
+      }
+      .result {
+        padding: 12px;
+        margin: 10px 0;
+        border: 1px solid var(--secondary);
+        border-radius: 8px;
+        overflow-wrap: anywhere;
+      }
+      .result p {
+        margin: 6px 0;
+      }
+      details {
+        margin-top: 4px;
+      }
+      details > summary {
+        cursor: pointer;
+      }
+      .result summary {
+        color: var(--accent-text);
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        background: var(--inset);
+        padding: 10px;
+        border-radius: 7px;
+        max-height: 360px;
+        overflow: auto;
+        margin: 6px 0;
+      }
+      .entry pre {
+        background: #0e1a2e;
+      }
+      a {
+        color: var(--accent-text);
+      }
+      .secret {
+        font-family: ui-monospace, monospace;
+        font-size: 0.85rem;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      @media (max-width: 760px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        body {
+          margin: 16px auto;
+        }
+        .feed {
+          height: 360px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Buncrawl job event tester</h1>
+        <p id="target">Connecting…</p>
+      </div>
+      <div class="row">
+        <span class="pill" id="jobPill"><span class="dot"></span><span>No job selected</span></span>
+        <button id="copyJob" class="secondary small" type="button" hidden>Copy ID</button>
+      </div>
+    </header>
+
+    <div role="tablist" aria-label="Test mode">
+      <button role="tab" id="tab-sse" aria-controls="panel-sse" aria-selected="true">
+        SSE stream<span class="badge" id="sseBadge">0</span>
+      </button>
+      <button
+        role="tab"
+        id="tab-webhooks"
+        aria-controls="panel-webhooks"
+        aria-selected="false"
+        tabindex="-1"
+      >
+        Webhooks<span class="badge" id="webhookBadge">0</span>
+      </button>
+    </div>
+
+    <!-- SSE ------------------------------------------------------------------>
+    <section role="tabpanel" id="panel-sse" aria-labelledby="tab-sse">
+      <div class="grid">
+        <form class="card" id="sseSubmit">
+          <h2>Start a job</h2>
+          <div class="grid">
+            <div>
+              <label for="sseType">Job type</label>
+              <select id="sseType" data-persist>
+                <option value="batch_scrape">Batch scrape</option>
+                <option value="map">Map</option>
+                <option value="crawl">Crawl</option>
+              </select>
+            </div>
+            <div>
+              <label for="sseUrl">Page URL</label>
+              <input id="sseUrl" type="url" required value="https://example.com" data-persist />
+            </div>
+          </div>
+          <button class="full" type="submit">Submit &amp; stream</button>
+        </form>
+        <form class="card" id="attach">
+          <h2>Attach to an existing job</h2>
+          <div class="grid">
+            <div>
+              <label for="attachType">Job type</label>
+              <select id="attachType">
+                <option value="batch_scrape">Batch scrape</option>
+                <option value="map">Map</option>
+                <option value="crawl">Crawl</option>
+              </select>
+            </div>
+            <div>
+              <label for="attachId">Job ID</label>
+              <input
+                id="attachId"
+                required
+                pattern="job_[0-9a-f]{32}"
+                placeholder="job_…"
+                autocomplete="off"
+              />
+            </div>
+          </div>
+          <button class="full secondary" type="submit">Attach &amp; stream</button>
+        </form>
+      </div>
+
+      <section class="card">
+        <h2>Stream</h2>
+        <div class="controls">
+          <div>
+            <label for="startFrom">Start from</label>
+            <select id="startFrom" data-persist>
+              <option value="snapshot">Snapshot (no cursor)</option>
+              <option value="all">Replay everything (after=0)</option>
+              <option value="after">After sequence N</option>
+            </select>
+          </div>
+          <div id="afterField" hidden>
+            <label for="afterSeq">Sequence N</label>
+            <input id="afterSeq" type="number" min="0" step="1" value="0" />
+          </div>
+          <div>
+            <label for="client">Client</label>
+            <select id="client" data-persist>
+              <option value="eventsource">EventSource (auto-reconnect)</option>
+              <option value="raw">Raw frames (shows heartbeats)</option>
+            </select>
+          </div>
+          <div class="row">
+            <button id="connect" type="button" disabled>Connect</button>
+            <button id="disconnect" class="secondary" type="button" disabled>Disconnect</button>
+            <button id="clearSse" class="secondary" type="button">Clear</button>
+          </div>
+        </div>
+        <small id="clientHint"></small>
+        <div class="stats" id="sseStats"></div>
+        <div class="chips" id="sseFilters" aria-label="Show or hide event types"></div>
+        <div
+          id="sse"
+          class="feed"
+          aria-live="polite"
+          data-empty="Submit or attach to a job, then connect. Newest events appear first."
+        ></div>
+      </section>
+    </section>
+
+    <!-- Webhooks ------------------------------------------------------------>
+    <section role="tabpanel" id="panel-webhooks" aria-labelledby="tab-webhooks" hidden>
+      <div class="grid">
+        <section class="card">
+          <h2>Receiver</h2>
+          <label for="tunnel">Public tunnel URL</label>
+          <div class="row">
+            <input
+              id="tunnel"
+              class="grow"
+              type="url"
+              placeholder="https://abc.trycloudflare.com"
+              data-persist
+            />
+            <button id="checkTunnel" class="secondary" type="button">Check</button>
+          </div>
+          <small id="receiverUrl"
+            >Point an HTTPS tunnel at this tester's port; <code>/webhook</code> is appended for
+            you.</small
+          >
+          <div class="notice" id="tunnelResult" role="status"></div>
+
+          <label>Respond to Buncrawl with</label>
+          <div id="modes">
+            <label class="check"><input type="radio" name="mode" value="accept" /> 200 OK</label>
+            <label class="check"
+              ><input type="radio" name="mode" value="error" /> 500 error (forces retries)</label
+            >
+            <label class="check"
+              ><input type="radio" name="mode" value="timeout" /> Hang 11s (times out)</label
+            >
+          </div>
+          <small
+            >Failures make Buncrawl retry with 1s, 2s, 4s, 8s backoff, then mark the delivery failed
+            after 5 attempts. Invalid signatures always get 401.</small
+          >
+
+          <label>Signing secret</label>
+          <div class="row">
+            <span class="secret grow" id="secret">••••••••••••••••</span>
+            <button id="revealSecret" class="secondary small" type="button">Reveal</button>
+            <button id="copySecret" class="secondary small" type="button">Copy</button>
+          </div>
+        </section>
+
+        <div>
+          <form class="card" id="webhookSubmit">
+            <h2>Start a job with a webhook</h2>
+            <div class="grid">
+              <div>
+                <label for="whType">Job type</label>
+                <select id="whType" data-persist>
+                  <option value="batch_scrape">Batch scrape</option>
+                  <option value="map">Map</option>
+                  <option value="crawl">Crawl</option>
+                </select>
+              </div>
+              <div>
+                <label for="whUrl">Page URL</label>
+                <input id="whUrl" type="url" required value="https://example.com" data-persist />
+              </div>
+            </div>
+            <label>Events to deliver</label>
+            <div id="whEvents"></div>
+            <button class="full" type="submit">Submit with webhook</button>
+            <div class="notice" id="whStatus" role="status"></div>
+          </form>
+
+          <section class="card">
+            <h2>Simulate a delivery</h2>
+            <p>
+              Signs a sample event the way Buncrawl does and feeds it to the receiver. No tunnel
+              needed.
+            </p>
+            <div class="row">
+              <button class="secondary" type="button" data-simulate="valid">Valid</button>
+              <button class="secondary" type="button" data-simulate="bad_signature">
+                Bad signature
+              </button>
+              <button class="secondary" type="button" data-simulate="expired">
+                Expired timestamp
+              </button>
+            </div>
+            <div class="notice" id="simResult" role="status"></div>
+          </section>
+        </div>
+      </div>
+
+      <section class="card">
+        <div class="row">
+          <h2 class="grow" style="margin: 0">Deliveries</h2>
+          <label class="check"
+            ><input type="checkbox" id="onlyJob" checked /> Current job only</label
+          >
+          <button id="clearDeliveries" class="danger small" type="button">Clear all</button>
+        </div>
+        <div class="stats" id="whStats"></div>
+        <div
+          id="webhooks"
+          class="feed"
+          aria-live="polite"
+          data-empty="No deliveries yet. Grouped by delivery ID, so retries of one event stack together."
+        ></div>
+      </section>
+    </section>
+
+    <!-- Shared job status ---------------------------------------------------->
+    <section class="card">
+      <div class="row">
+        <h2 class="grow" style="margin: 0">Job status &amp; results</h2>
+        <button id="refresh" class="secondary small" type="button" disabled>Refresh</button>
+        <button id="cancel" class="danger small" type="button" disabled>Cancel job</button>
+      </div>
+      <small id="jobInfo">Submit or attach to a job to see persisted progress and results.</small>
+      <div id="summary" class="stats"></div>
+      <progress id="progress" max="1" value="0" hidden></progress>
+      <p id="jobError" class="bad" role="alert"></p>
+      <div id="results"></div>
+      <button id="more" class="secondary" type="button" hidden>Load more results</button>
+    </section>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const sseTypes = ["snapshot", "state_changed", "progress", "item_completed", "error"];
+      const terminal = ["completed", "failed", "cancelled"];
+      const format = (value) => JSON.stringify(value, null, 2);
+      const time = (date = new Date()) => date.toLocaleTimeString([], { hour12: false });
+      const store = {
+        get(key) {
+          try {
+            return localStorage.getItem(`tester:${key}`);
+          } catch {
+            return null;
+          }
+        },
+        set(key, value) {
+          try {
+            localStorage.setItem(`tester:${key}`, value);
+          } catch {
+            /* storage unavailable */
+          }
+        },
+      };
+      function el(tag, content, className) {
+        const node = document.createElement(tag);
+        if (content !== undefined) node.textContent = String(content);
+        if (className) node.className = className;
+        return node;
+      }
+      function details(title, content) {
+        const node = el("details");
+        node.append(el("summary", title), el("pre", content));
+        return node;
+      }
+      function stat(label, value, className) {
+        const node = el("span", `${label} `, "pill");
+        node.append(el("strong", value, className));
+        return node;
+      }
+      async function api(path, init) {
+        const response = await fetch(path, init);
+        const text = await response.text();
+        let data = text;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          /* non-JSON body */
+        }
+        if (!response.ok)
+          throw new Error(`HTTP ${response.status}: ${data?.error ?? format(data)}`);
+        return data;
+      }
+      const post = (path, body) =>
+        api(path, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      async function copy(value, button) {
+        try {
+          await navigator.clipboard.writeText(value);
+          const label = button.textContent;
+          button.textContent = "Copied";
+          setTimeout(() => (button.textContent = label), 1200);
+        } catch {
+          prompt("Copy:", value);
+        }
+      }
+
+      // Persist simple form fields so repeated test runs need no retyping.
+      for (const field of document.querySelectorAll("[data-persist]")) {
+        const saved = store.get(field.id);
+        if (saved !== null) field.value = saved;
+        field.addEventListener("change", () => store.set(field.id, field.value));
+      }
+
+      /* ---------- Tabs ---------- */
+      const tabs = [...document.querySelectorAll('[role="tab"]')];
+      function selectTab(tab, focus = false) {
+        for (const other of tabs) {
+          const selected = other === tab;
+          other.setAttribute("aria-selected", String(selected));
+          other.tabIndex = selected ? 0 : -1;
+          $(other.getAttribute("aria-controls")).hidden = !selected;
+        }
+        if (focus) tab.focus();
+        const name = tab.id.replace("tab-", "");
+        store.set("tab", name);
+        history.replaceState(null, "", `#${name}`);
+      }
+      for (const tab of tabs) {
+        tab.addEventListener("click", () => selectTab(tab));
+        tab.addEventListener("keydown", (event) => {
+          const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+          if (!step) return;
+          selectTab(tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length], true);
+        });
+      }
+      selectTab($(`tab-${location.hash.slice(1) || store.get("tab") || "sse"}`) ?? tabs[0]);
+
+      /* ---------- Current job ---------- */
+      let job;
+      let statusPages = 1;
+      let statusBusy = false;
+      let lastState;
+
+      function setJob(id, type, webhook = false) {
+        disconnect();
+        job = { id, type, webhook };
+        lastState = undefined;
+        statusPages = 1;
+        resetStream();
+        $("results").replaceChildren();
+        $("summary").replaceChildren();
+        $("jobError").textContent = "";
+        $("progress").hidden = true;
+        $("copyJob").hidden = false;
+        $("connect").disabled = false;
+        $("refresh").disabled = false;
+        $("cancel").disabled = false;
+        $("attachId").value = id;
+        $("attachType").value = type;
+        renderJobPill();
+        refreshStatus();
+        refreshDeliveries(true);
+      }
+      function renderJobPill() {
+        const dot = el("span", undefined, "dot");
+        if (lastState === "running" || lastState === "queued") dot.classList.add("connecting");
+        if (lastState === "completed") dot.classList.add("open");
+        if (lastState === "failed" || lastState === "cancelled") dot.classList.add("error");
+        $("jobPill").replaceChildren(
+          dot,
+          el("span", job ? `${job.type} · ${job.id} · ${lastState ?? "…"}` : "No job selected"),
+        );
+      }
+      $("copyJob").onclick = () => job && copy(job.id, $("copyJob"));
+
+      async function submitJob(body) {
+        const result = await post("/api/submit", body);
+        setJob(result.jobId, body.type, Boolean(body.webhookUrl));
+        return result;
+      }
+
+      /* ---------- SSE ---------- */
+      const stream = {
+        source: undefined,
+        abort: undefined,
+        lastId: 0,
+        events: 0,
+        gaps: 0,
+        duplicates: 0,
+        heartbeats: 0,
+        reconnects: 0,
+        state: "idle",
+        counts: {},
+        hidden: new Set(JSON.parse(store.get("hiddenTypes") ?? "[]")),
+      };
+
+      function updateStartFrom() {
+        $("afterField").hidden = $("startFrom").value !== "after";
+        $("clientHint").textContent =
+          $("client").value === "raw"
+            ? "Raw mode reads the response body directly: you see id/event/data lines, heartbeats, and the server closing the stream. It does not reconnect."
+            : "EventSource reconnects automatically with Last-Event-ID; duplicate or skipped sequences are flagged.";
+      }
+      $("startFrom").addEventListener("change", updateStartFrom);
+      $("client").addEventListener("change", updateStartFrom);
+      updateStartFrom();
+
+      function setStreamState(state) {
+        stream.state = state;
+        $("connect").disabled = !job || state === "open" || state === "connecting";
+        $("disconnect").disabled = state !== "open" && state !== "connecting";
+        renderSseStats();
+      }
+      function renderSseStats() {
+        const dot = el("span", undefined, `dot ${stream.state}`);
+        const state = el("span", "", "pill");
+        state.append(dot, el("span", stream.state));
+        $("sseStats").replaceChildren(
+          state,
+          stat("events", stream.events),
+          stat("last seq", stream.lastId),
+          stat("gaps", stream.gaps, stream.gaps ? "bad" : ""),
+          stat("duplicates", stream.duplicates, stream.duplicates ? "warn" : ""),
+          stat("reconnects", stream.reconnects),
+          ...($("client").value === "raw" ? [stat("heartbeats", stream.heartbeats)] : []),
+        );
+        $("sseBadge").textContent = stream.events;
+        const kinds = $("client").value === "raw" ? [...sseTypes, "heartbeat"] : sseTypes;
+        $("sseFilters").replaceChildren(
+          ...[...kinds, "system"].map((type) => {
+            const chip = el("button", `${type} ${stream.counts[type] ?? 0}`, "chip");
+            chip.type = "button";
+            chip.setAttribute("aria-pressed", String(!stream.hidden.has(type)));
+            chip.onclick = () => {
+              stream.hidden.has(type) ? stream.hidden.delete(type) : stream.hidden.add(type);
+              store.set("hiddenTypes", JSON.stringify([...stream.hidden]));
+              for (const entry of $("sse").children)
+                entry.hidden = stream.hidden.has(entry.dataset.type);
+              renderSseStats();
+            };
+            return chip;
+          }),
+        );
+      }
+      function resetStream() {
+        Object.assign(stream, {
+          lastId: 0,
+          events: 0,
+          gaps: 0,
+          duplicates: 0,
+          heartbeats: 0,
+          reconnects: 0,
+          counts: {},
+        });
+        $("sse").replaceChildren();
+        setStreamState("idle");
+      }
+      function pushEntry(node, type) {
+        node.dataset.type = type;
+        node.hidden = stream.hidden.has(type);
+        stream.counts[type] = (stream.counts[type] ?? 0) + 1;
+        const feed = $("sse");
+        feed.prepend(node);
+        while (feed.children.length > 500) feed.lastElementChild.remove();
+      }
+      function system(message) {
+        const node = el("div", undefined, "entry system");
+        const line = el("div", undefined, "line");
+        line.append(el("span", "·", "seq"), el("span", "system", "type"), el("span", message));
+        line.append(el("span", time(), "time"));
+        node.append(line);
+        pushEntry(node, "system");
+        renderSseStats();
+      }
+      function progressText(progress = {}) {
+        const done = (progress.succeeded ?? 0) + (progress.failed ?? 0) + (progress.cancelled ?? 0);
+        return `${done}/${progress.total ?? "?"} done · ✓${progress.succeeded ?? 0} ✗${progress.failed ?? 0}`;
+      }
+      function describe(type, data) {
+        if (typeof data !== "object" || !data) return String(data);
+        if (type === "snapshot") return `state ${data.state} · ${progressText(data.progress)}`;
+        if (type === "state_changed") return `→ ${data.state}`;
+        if (type === "progress") return progressText(data.progress);
+        if (type === "item_completed") return `item #${data.index} · ${data.itemId}`;
+        if (type === "error") return `${data.error?.code}: ${data.error?.message}`;
+        return "";
+      }
+      function onEvent(type, raw, id, frame) {
+        let data;
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          data = raw;
+        }
+        const seq = id ? Number(id) : undefined;
+        const flags = [];
+        if (type === "snapshot") {
+          stream.lastId = seq ?? 0;
+        } else if (seq !== undefined) {
+          if (seq <= stream.lastId) {
+            stream.duplicates++;
+            flags.push(["duplicate", "warn"]);
+          } else {
+            if (seq !== stream.lastId + 1) {
+              stream.gaps++;
+              flags.push([`gap: expected ${stream.lastId + 1}`, "bad"]);
+            }
+            stream.lastId = seq;
+          }
+        }
+        stream.events++;
+        const node = el("details", undefined, "entry");
+        const summary = el("summary");
+        summary.append(el("span", seq ?? "—", "seq"), el("span", type, "type"));
+        for (const [label, kind] of flags) summary.append(el("span", label, `flag ${kind}`));
+        summary.append(el("span", describe(type, data)), el("span", time(), "time"));
+        node.append(summary, el("pre", frame ?? format(data)));
+        pushEntry(node, type);
+        if (typeof data === "object" && data?.state && terminal.includes(data.state)) {
+          lastState = data.state;
+          renderJobPill();
+          refreshStatus();
+          // EventSource would reconnect after the server ends a finished job's stream.
+          if (stream.source) {
+            disconnect();
+            system(`Job is ${data.state}; closed the EventSource so it does not reconnect.`);
+          }
+        }
+        renderSseStats();
+      }
+      function streamPath() {
+        const mode = $("startFrom").value;
+        const after =
+          mode === "all"
+            ? 0
+            : mode === "after"
+              ? Math.max(0, Number($("afterSeq").value) || 0)
+              : null;
+        stream.lastId = after ?? 0;
+        return {
+          path: `/api/events/${job.type}/${job.id}${after === null ? "" : `?after=${after}`}`,
+          after,
+        };
+      }
+      function connect() {
+        if (!job) return;
+        disconnect();
+        const { path, after } = streamPath();
+        system(
+          `Connecting ${after === null ? "for a snapshot" : `after sequence ${after}`} (${$("client").value})`,
+        );
+        $("client").value === "raw" ? connectRaw(path) : connectEventSource(path);
+      }
+      function connectEventSource(path) {
+        setStreamState("connecting");
+        const source = new EventSource(path);
+        stream.source = source;
+        source.onopen = () => setStreamState("open");
+        for (const type of sseTypes)
+          source.addEventListener(type, (event) => onEvent(type, event.data, event.lastEventId));
+        source.onerror = () => {
+          if (stream.source !== source) return;
+          if (source.readyState === EventSource.CLOSED) {
+            system("EventSource closed (the server refused the request).");
+            stream.source = undefined;
+            setStreamState("error");
+            return;
+          }
+          stream.reconnects++;
+          system(`Disconnected; reconnecting with Last-Event-ID ${stream.lastId}.`);
+          setStreamState("connecting");
+        };
+      }
+      async function connectRaw(path) {
+        const controller = new AbortController();
+        stream.abort = controller;
+        setStreamState("connecting");
+        try {
+          const response = await fetch(path, { signal: controller.signal });
+          if (!response.ok) {
+            system(`HTTP ${response.status}: ${await response.text()}`);
+            setStreamState("error");
+            return;
+          }
+          setStreamState("open");
+          system(`HTTP ${response.status} · ${response.headers.get("content-type")}`);
+          const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+          let buffer = "";
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += value;
+            let end;
+            while ((end = buffer.indexOf("\n\n")) >= 0) {
+              handleFrame(buffer.slice(0, end));
+              buffer = buffer.slice(end + 2);
+            }
+          }
+          system("Server closed the stream.");
+          setStreamState("closed");
+        } catch (error) {
+          if (error.name === "AbortError") return;
+          system(`Stream failed: ${error.message}`);
+          setStreamState("error");
+        } finally {
+          if (stream.abort === controller) stream.abort = undefined;
+        }
+      }
+      function handleFrame(frame) {
+        const lines = frame.split("\n");
+        if (lines.every((line) => line.startsWith(":"))) {
+          stream.heartbeats++;
+          const node = el("div", undefined, "entry heartbeat");
+          const line = el("div", undefined, "line");
+          line.append(el("span", "·", "seq"), el("span", frame), el("span", time(), "time"));
+          node.append(line);
+          pushEntry(node, "heartbeat");
+          renderSseStats();
+          return;
+        }
+        let id;
+        let type = "message";
+        const data = [];
+        for (const line of lines) {
+          const colon = line.indexOf(":");
+          const field = colon < 0 ? line : line.slice(0, colon);
+          const value = colon < 0 ? "" : line.slice(colon + 1).replace(/^ /, "");
+          if (field === "id") id = value;
+          else if (field === "event") type = value;
+          else if (field === "data") data.push(value);
+        }
+        onEvent(type, data.join("\n"), id, frame);
+      }
+      function disconnect() {
+        const wasActive = stream.source || stream.abort;
+        stream.source?.close();
+        stream.source = undefined;
+        stream.abort?.abort();
+        stream.abort = undefined;
+        if (wasActive) setStreamState("closed");
+      }
+      $("connect").onclick = connect;
+      $("disconnect").onclick = () => {
+        disconnect();
+        system("Disconnected by you.");
+      };
+      $("clearSse").onclick = () => {
+        $("sse").replaceChildren();
+        stream.counts = {};
+        renderSseStats();
+      };
+      $("sseSubmit").onsubmit = async (event) => {
+        event.preventDefault();
+        const button = event.submitter;
+        button.disabled = true;
+        try {
+          await submitJob({ type: $("sseType").value, url: $("sseUrl").value });
+          connect();
+        } catch (error) {
+          system(`Submit failed: ${error.message}`);
+        } finally {
+          button.disabled = false;
+        }
+      };
+      $("attach").onsubmit = (event) => {
+        event.preventDefault();
+        setJob($("attachId").value.trim(), $("attachType").value);
+        connect();
+      };
+      setStreamState("idle");
+
+      /* ---------- Webhooks ---------- */
+      let config = { webhookEvents: [] };
+      let lastDeliveries = "";
+
+      function receiverUrl() {
+        const raw = $("tunnel").value.trim();
+        if (!raw) return "";
+        try {
+          const url = new URL(raw);
+          if (!url.pathname.replace(/\/+$/, "").endsWith("/webhook"))
+            url.pathname = `${url.pathname.replace(/\/+$/, "")}/webhook`;
+          return url.href;
+        } catch {
+          return "";
+        }
+      }
+      function updateReceiverUrl() {
+        const url = receiverUrl();
+        $("receiverUrl").replaceChildren(
+          ...(url
+            ? [document.createTextNode("Buncrawl will deliver to "), el("code", url)]
+            : [
+                document.createTextNode("Point an HTTPS tunnel at this tester's port, e.g. "),
+                el("code", `cloudflared tunnel --url http://localhost:${location.port || 80}`),
+                document.createTextNode(". /webhook is appended for you."),
+              ]),
+        );
+      }
+      $("tunnel").addEventListener("input", updateReceiverUrl);
+      $("checkTunnel").onclick = async () => {
+        const url = receiverUrl();
+        if (!url) {
+          $("tunnelResult").textContent = "Enter an HTTPS tunnel URL first.";
+          return;
+        }
+        $("checkTunnel").disabled = true;
+        $("tunnelResult").textContent = "Checking…";
+        try {
+          const result = await post("/api/check-receiver", { url });
+          $("tunnelResult").className = `notice ${result.ok ? "good" : "bad"}`;
+          $("tunnelResult").textContent = `${result.ok ? "✓" : "✗"} ${result.message}`;
+        } catch (error) {
+          $("tunnelResult").className = "notice bad";
+          $("tunnelResult").textContent = error.message;
+        } finally {
+          $("checkTunnel").disabled = false;
+        }
+      };
+      for (const radio of document.querySelectorAll('input[name="mode"]'))
+        radio.addEventListener("change", async () => {
+          try {
+            await post("/api/receiver", { mode: radio.value });
+          } catch (error) {
+            alert(error.message);
+          }
+        });
+      $("revealSecret").onclick = () => {
+        const hidden = $("revealSecret").textContent === "Reveal";
+        $("secret").textContent = hidden ? config.secret : "••••••••••••••••";
+        $("revealSecret").textContent = hidden ? "Hide" : "Reveal";
+      };
+      $("copySecret").onclick = () => copy(config.secret, $("copySecret"));
+
+      function renderEventChoices() {
+        const saved = JSON.parse(store.get("whEvents") ?? "null");
+        $("whEvents").replaceChildren(
+          ...config.webhookEvents.map((name) => {
+            const label = el("label", undefined, "check");
+            const input = el("input");
+            input.type = "checkbox";
+            input.value = name;
+            input.checked = !saved || saved.includes(name);
+            input.onchange = () =>
+              store.set(
+                "whEvents",
+                JSON.stringify(
+                  [...$("whEvents").querySelectorAll("input:checked")].map((box) => box.value),
+                ),
+              );
+            label.append(input, document.createTextNode(name));
+            return label;
+          }),
+        );
+      }
+      $("webhookSubmit").onsubmit = async (event) => {
+        event.preventDefault();
+        const webhookUrl = receiverUrl();
+        if (!webhookUrl) {
+          $("whStatus").textContent =
+            "Enter a public tunnel URL first (Buncrawl refuses localhost receivers), or use Simulate below.";
+          return;
+        }
+        const events = [...$("whEvents").querySelectorAll("input:checked")].map((box) => box.value);
+        if (!events.length) {
+          $("whStatus").textContent = "Pick at least one event.";
+          return;
+        }
+        const button = event.submitter;
+        button.disabled = true;
+        $("whStatus").textContent = "Submitting…";
+        try {
+          const all = events.length === config.webhookEvents.length;
+          const result = await submitJob({
+            type: $("whType").value,
+            url: $("whUrl").value,
+            webhookUrl,
+            ...(all ? {} : { events }),
+          });
+          $("whStatus").textContent =
+            `Submitted ${result.jobId} (${result.state}). Deliveries appear below as they arrive.`;
+        } catch (error) {
+          $("whStatus").textContent = `Submit failed: ${error.message}`;
+        } finally {
+          button.disabled = false;
+        }
+      };
+      for (const button of document.querySelectorAll("[data-simulate]"))
+        button.onclick = async () => {
+          try {
+            const result = await post("/api/simulate", {
+              kind: button.dataset.simulate,
+              jobId: job?.id,
+            });
+            const d = result.delivery;
+            $("simResult").className = `notice ${d.valid ? "good" : "bad"}`;
+            $("simResult").textContent =
+              `Receiver answered ${result.status}${d.reason ? ` · ${d.reason}` : " · signature verified"}`;
+            refreshDeliveries(true);
+          } catch (error) {
+            $("simResult").textContent = error.message;
+          }
+        };
+      $("onlyJob").onchange = () => refreshDeliveries(true);
+      $("clearDeliveries").onclick = async () => {
+        await api("/api/deliveries", { method: "DELETE" });
+        refreshDeliveries(true);
+      };
+
+      function groupDeliveries(entries) {
+        const groups = new Map();
+        // Server stores newest first; walk oldest first so attempts are in order.
+        for (const entry of [...entries].reverse()) {
+          const group = groups.get(entry.id) ?? { id: entry.id, attempts: [] };
+          group.attempts.push(entry);
+          groups.set(entry.id, group);
+        }
+        return [...groups.values()].reverse();
+      }
+      function renderGroup(group, open) {
+        const last = group.attempts.at(-1);
+        const event = group.attempts.find((attempt) => attempt.event)?.event ?? {};
+        const ok = last.status >= 200 && last.status < 300;
+        const node = el("details", undefined, "entry");
+        node.open = open;
+        node.dataset.id = group.id;
+        const summary = el("summary");
+        const sequence = group.id.split(":")[1] ?? "?";
+        summary.append(el("span", sequence, "seq"), el("span", event.event ?? "?", "type"));
+        summary.append(
+          el(
+            "span",
+            !last.valid ? "invalid" : ok ? "delivered" : "failing",
+            `flag ${!last.valid ? "bad" : ok ? "good" : "warn"}`,
+          ),
+        );
+        if (group.attempts.length > 1)
+          summary.append(el("span", `${group.attempts.length} attempts`, "flag warn"));
+        if (last.simulated) summary.append(el("span", "simulated", "flag muted"));
+        summary.append(
+          el("span", group.attempts.map((attempt) => attempt.status).join(" → ")),
+          el("span", time(new Date(last.receivedAt)), "time"),
+        );
+        const table = el("table", undefined, "attempts");
+        const head = el("tr");
+        for (const label of ["#", "received", "after", "response", "receiver", "note"])
+          head.append(el("th", label));
+        table.append(head);
+        group.attempts.forEach((attempt, index) => {
+          const row = el("tr");
+          const previous = group.attempts[index - 1];
+          const gap = previous
+            ? `+${((new Date(attempt.receivedAt) - new Date(previous.receivedAt)) / 1000).toFixed(1)}s`
+            : "—";
+          row.append(
+            el("td", index + 1),
+            el("td", time(new Date(attempt.receivedAt))),
+            el("td", gap),
+            el("td", attempt.status, attempt.status < 300 ? "good" : "bad"),
+            el("td", attempt.mode),
+            el("td", attempt.reason ?? (attempt.valid ? "signature ok" : "")),
+          );
+          table.append(row);
+        });
+        node.append(
+          summary,
+          table,
+          el("pre", format(event)),
+          details(
+            "Headers",
+            format({
+              "x-buncrawl-delivery": group.id,
+              "x-buncrawl-timestamp": last.timestamp,
+              "x-buncrawl-signature": last.signature,
+            }),
+          ),
+        );
+        return node;
+      }
+      async function refreshDeliveries(force = false) {
+        try {
+          const entries = await api("/api/deliveries");
+          const scoped =
+            job && $("onlyJob").checked
+              ? entries.filter((entry) => entry.id.startsWith(`${job.id}:`))
+              : entries;
+          const key = JSON.stringify(scoped);
+          if (!force && key === lastDeliveries) return;
+          lastDeliveries = key;
+          const open = new Set(
+            [...$("webhooks").querySelectorAll("details[open]")].map((node) => node.dataset.id),
+          );
+          const groups = groupDeliveries(scoped);
+          $("webhooks").replaceChildren(
+            ...groups.map((group) => renderGroup(group, open.has(group.id))),
+          );
+          const valid = scoped.filter((entry) => entry.valid).length;
+          $("whStats").replaceChildren(
+            stat("events", groups.length),
+            stat("attempts", scoped.length),
+            stat("valid", valid, "good"),
+            stat("invalid", scoped.length - valid, scoped.length - valid ? "bad" : ""),
+            stat("retried", groups.filter((group) => group.attempts.length > 1).length, "warn"),
+            ...(job?.webhook && !scoped.length
+              ? [el("span", "Nothing yet? Check the tunnel and Buncrawl's server logs.", "hint")]
+              : []),
+          );
+          $("webhookBadge").textContent = groups.length;
+        } catch {
+          /* retry on next poll */
+        }
+      }
+
+      /* ---------- Job status ---------- */
+      function renderItem(item) {
+        const node = el("div", undefined, "result");
+        node.append(
+          el(
+            "strong",
+            `${item.state.toUpperCase()} · ${item.url}`,
+            item.state === "failed" ? "bad" : "good",
+          ),
+        );
+        if (item.finalUrl && item.finalUrl !== item.url)
+          node.append(el("p", `Final URL: ${item.finalUrl}`));
+        if (item.depth !== undefined) node.append(el("small", `Depth: ${item.depth}`));
+        if (item.error) node.append(el("p", `${item.error.code}: ${item.error.message}`, "bad"));
+        if (item.document) {
+          const doc = item.document;
+          const metadata = doc.metadata ?? {};
+          node.append(
+            el(
+              "p",
+              `${metadata.title ?? "Untitled"} · HTTP ${metadata.statusCode ?? "?"} · ${metadata.renderer ?? "unknown renderer"}`,
+            ),
+          );
+          if (doc.markdown) node.append(details("Markdown result", doc.markdown));
+          node.append(details("Full document JSON (including artifact keys)", format(doc)));
+        }
+        return node;
+      }
+      const fetchStatus = (cursor = 0) =>
+        api(`/api/jobs/${job.type}/${job.id}?cursor=${cursor}&limit=100`);
+      async function refreshStatus() {
+        if (!job || statusBusy) return;
+        statusBusy = true;
+        const currentId = job.id;
+        try {
+          const first = await fetchStatus();
+          if (job?.id !== currentId) return;
+          const pages = [first];
+          let next = first.next;
+          for (let i = 1; i < statusPages && next; i++) {
+            const cursor = new URL(next, location.href).searchParams.get("cursor");
+            if (!cursor) break;
+            const page = await fetchStatus(cursor);
+            pages.push(page);
+            next = page.next;
+          }
+          const progress = first.progress ?? {};
+          $("summary").replaceChildren(
+            ...["total", "queued", "running", "succeeded", "failed", "cancelled"].map((key) =>
+              stat(key, progress[key] ?? 0),
+            ),
+          );
+          $("progress").hidden = false;
+          $("progress").max = Math.max(1, progress.total ?? 0);
+          $("progress").value =
+            (progress.succeeded ?? 0) + (progress.failed ?? 0) + (progress.cancelled ?? 0);
+          $("jobInfo").textContent =
+            `${first.type} · ${first.jobId} · ${first.state} · created ${first.createdAt}${first.finishedAt ? ` · finished ${first.finishedAt}` : ""}`;
+          $("jobError").textContent = first.error
+            ? `Job error: ${first.error.code} — ${first.error.message}`
+            : "";
+          lastState = first.state;
+          renderJobPill();
+          $("cancel").disabled = terminal.includes(first.state);
+          $("results").replaceChildren(
+            ...pages.flatMap((page) => page.items ?? []).map(renderItem),
+          );
+          $("more").hidden = !next;
+          if (!next && !first.items?.length) $("results").append(el("p", "No items yet."));
+        } catch (error) {
+          $("jobError").textContent = `Status request failed: ${error.message}`;
+        } finally {
+          statusBusy = false;
+        }
+      }
+      $("refresh").onclick = refreshStatus;
+      $("more").onclick = () => {
+        statusPages++;
+        refreshStatus();
+      };
+      $("cancel").onclick = async () => {
+        if (!job) return;
+        try {
+          await api(`/api/jobs/${job.type}/${job.id}`, { method: "DELETE" });
+          await refreshStatus();
+        } catch (error) {
+          $("jobError").textContent = `Cancellation failed: ${error.message}`;
+        }
+      };
+
+      /* ---------- Boot ---------- */
+      api("/api/config")
+        .then((value) => {
+          config = value;
+          $("target").textContent = `Buncrawl target: ${config.target}`;
+          const mode = document.querySelector(`input[name="mode"][value="${config.receiverMode}"]`);
+          if (mode) mode.checked = true;
+          renderEventChoices();
+        })
+        .catch((error) => ($("target").textContent = `Tester API unreachable: ${error.message}`));
+      updateReceiverUrl();
+      refreshDeliveries(true);
+      setInterval(refreshDeliveries, 2000);
+      // Poll status only while the job can still change.
+      setInterval(() => {
+        if (job && !terminal.includes(lastState)) refreshStatus();
+      }, 2000);
+    </script>
+  </body>
+</html>

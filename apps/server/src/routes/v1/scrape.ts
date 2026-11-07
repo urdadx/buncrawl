@@ -1,8 +1,11 @@
 import { scrapeRequestSchema, type ScrapeRequest, type ScrapeResponse } from "@buncrawl/contracts";
-import { scrape } from "@buncrawl/scrape";
+import { scrape, type ScrapeTimings } from "@buncrawl/scrape";
 import * as v from "valibot";
 
-type Scrape = (request: ScrapeRequest, context: { signal: AbortSignal }) => Promise<ScrapeResponse>;
+type Scrape = (
+  request: ScrapeRequest,
+  context: { signal: AbortSignal; onTimings?: (timings: ScrapeTimings) => void },
+) => Promise<ScrapeResponse>;
 type PersistScreenshot = (dataUrl: string, signal?: AbortSignal) => Promise<string>;
 
 export function createScrapeHandler(
@@ -42,7 +45,11 @@ export function createScrapeHandler(
     }
 
     const scrapeStartedAt = performance.now();
-    const response = await scrapePage(parsed.output, { signal: request.signal });
+    let timings: ScrapeTimings | undefined;
+    const response = await scrapePage(parsed.output, {
+      signal: request.signal,
+      onTimings: (value) => (timings = value),
+    });
     const scrapeMs = performance.now() - scrapeStartedAt;
     let artifactMs = 0;
     if (response.success && response.data.screenshot) {
@@ -66,6 +73,7 @@ export function createScrapeHandler(
         event: "scrape_request",
         scrapeMs,
         artifactMs,
+        ...(timings && { phases: timings }),
         screenshot: Boolean(response.success && response.data.screenshot),
       }),
     );

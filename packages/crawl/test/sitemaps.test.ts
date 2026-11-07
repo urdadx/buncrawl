@@ -113,3 +113,62 @@ test("expands XML entities and CDATA, reads prefixed elements and encoded docume
   expect(parseSitemap(utf16).locations).toEqual(["https://site.example/encoded"]);
   expect(() => parseSitemap("<urlset><url><loc>broken</url></urlset>")).toThrow(SyntaxError);
 });
+
+test("stops at the sitemap file limit and keeps URLs from sitemaps already read", async () => {
+  // Mirrors a Yoast index listing more child sitemaps than the limit allows.
+  const children = Array.from(
+    { length: 28 },
+    (_, i) => `https://site.example/post-sitemap${i}.xml`,
+  );
+  const fetched: string[] = [];
+  const urls = await discoverSitemapUrls(
+    ["https://site.example/sitemap_index.xml"],
+    { url: "https://site.example" },
+    {
+      deadline: new Deadline(5000),
+      resolver: async () => ["8.8.8.8"],
+      maxSitemaps: 20,
+      fetchImpl: async (input) => {
+        const url = String(input);
+        fetched.push(url);
+        if (url.endsWith("sitemap_index.xml"))
+          return new Response(
+            `<sitemapindex>${children.map((loc) => `<sitemap><loc>${loc}</loc></sitemap>`).join("")}</sitemapindex>`,
+          );
+        const id = /post-sitemap(\d+)/.exec(url)![1];
+        return new Response(
+          `<urlset><url><loc>https://site.example/post-${id}</loc></url></urlset>`,
+        );
+      },
+    },
+  );
+  expect(fetched).toHaveLength(20);
+  expect(urls).toHaveLength(19);
+  expect(urls).toContain("https://site.example/post-0");
+  expect(urls).not.toContain("https://site.example/post-27");
+});
+
+test("skips sitemap indexes nested past the depth limit without discarding shallower URLs", async () => {
+  const docs: Record<string, string> = {
+    "https://site.example/sitemap.xml":
+      "<sitemapindex><sitemap><loc>https://site.example/a.xml</loc></sitemap><sitemap><loc>https://site.example/deep.xml</loc></sitemap></sitemapindex>",
+    "https://site.example/a.xml":
+      "<urlset><url><loc>https://site.example/kept</loc></url></urlset>",
+    "https://site.example/deep.xml":
+      "<sitemapindex><sitemap><loc>https://site.example/too-deep.xml</loc></sitemap></sitemapindex>",
+    "https://site.example/too-deep.xml":
+      "<urlset><url><loc>https://site.example/unreached</loc></url></urlset>",
+  };
+  const urls = await discoverSitemapUrls(
+    ["https://site.example/sitemap.xml"],
+    { url: "https://site.example" },
+    {
+      deadline: new Deadline(5000),
+      resolver: async () => ["8.8.8.8"],
+      maxDepth: 1,
+      fetchImpl: async (input) =>
+        new Response(docs[String(input)] ?? "", { status: docs[String(input)] ? 200 : 404 }),
+    },
+  );
+  expect(urls).toEqual(["https://site.example/kept"]);
+});

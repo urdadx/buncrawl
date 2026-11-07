@@ -17,6 +17,11 @@ export interface CrawlScope {
   pathPrefix?: boolean;
 }
 
+/** `www.` and the bare domain are the same site; sites commonly redirect between the two. */
+function siteHostname(hostname: string): string {
+  return hostname.startsWith("www.") ? hostname.slice(4) : hostname;
+}
+
 export function withinCrawlScope(candidate: string, scope: CrawlScope): boolean {
   const base = canonicalCrawlUrl(scope.url);
   const target = canonicalCrawlUrl(candidate);
@@ -26,10 +31,9 @@ export function withinCrawlScope(candidate: string, scope: CrawlScope): boolean 
   const url = new URL(target);
 
   if (root.protocol !== url.protocol || root.port !== url.port) return false;
-  if (
-    url.hostname !== root.hostname &&
-    !(scope.includeSubdomains && url.hostname.endsWith(`.${root.hostname}`))
-  )
+  const rootHost = siteHostname(root.hostname);
+  const host = siteHostname(url.hostname);
+  if (host !== rootHost && !(scope.includeSubdomains && host.endsWith(`.${rootHost}`)))
     return false;
   if (!scope.pathPrefix) return true;
 

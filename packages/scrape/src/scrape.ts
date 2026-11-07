@@ -31,12 +31,56 @@ export interface ScrapeContext {
   signal?: AbortSignal;
   resolver?: DnsResolver;
   fetchImpl?: FetchImplementation;
+  /** Receives per-phase durations once the scrape finishes, whether it succeeded or not. */
+  onTimings?: (timings: ScrapeTimings) => void;
+}
+
+/** Milliseconds spent in each scrape phase; phases that did not run are omitted. */
+export interface ScrapeTimings {
+  fetchMs?: number;
+  detectMs?: number;
+  renderMs?: number;
+  extractMs?: number;
+  totalMs: number;
+  renderer: string;
 }
 
 export async function scrape(
   request: ScrapeRequest,
   context: ScrapeContext = {},
   dependencies: ScrapeDependencies = {},
+): Promise<ScrapeResponse> {
+  const startedAt = performance.now();
+  const timings: Omit<ScrapeTimings, "totalMs"> = { renderer: "none" };
+  const timed = async <T>(
+    phase: "fetchMs" | "detectMs" | "renderMs" | "extractMs",
+    work: () => T | Promise<T>,
+  ) => {
+    const phaseStartedAt = performance.now();
+    try {
+      return await work();
+    } finally {
+      timings[phase] = (timings[phase] ?? 0) + performance.now() - phaseStartedAt;
+    }
+  };
+  try {
+    return await scrapeWithTimings(request, context, dependencies, timed, timings);
+  } finally {
+    context.onTimings?.({ ...timings, totalMs: performance.now() - startedAt });
+  }
+}
+
+type Timed = <T>(
+  phase: "fetchMs" | "detectMs" | "renderMs" | "extractMs",
+  work: () => T | Promise<T>,
+) => Promise<T>;
+
+async function scrapeWithTimings(
+  request: ScrapeRequest,
+  context: ScrapeContext,
+  dependencies: ScrapeDependencies,
+  timed: Timed,
+  timings: Omit<ScrapeTimings, "totalMs">,
 ): Promise<ScrapeResponse> {
   const deadline = new Deadline(request.timeout ?? DEFAULT_TIMEOUT_MS, context.signal);
   const formats = request.formats ?? DEFAULT_FORMATS;
@@ -56,25 +100,32 @@ export async function scrape(
   try {
     const forcedRenderUrl =
       renderMode === true || screenshotOnly
-        ? await validateResolvedUrl(request.url, {
-            resolver: context.resolver,
-            signal: deadline.signal,
-          })
+        ? await timed("fetchMs", () =>
+            validateResolvedUrl(request.url, {
+              resolver: context.resolver,
+              signal: deadline.signal,
+            }),
+          )
         : undefined;
     let fetched: FetchPageResult | undefined;
     if (renderMode !== true && !screenshotOnly) {
-      fetched = await performFetch(request.url, {
-        deadline,
-        resolver: context.resolver,
-        fetchImpl: context.fetchImpl,
-      });
+      fetched = await timed("fetchMs", () =>
+        performFetch(request.url, {
+          deadline,
+          resolver: context.resolver,
+          fetchImpl: context.fetchImpl,
+        }),
+      );
+      timings.renderer = "fetch";
     }
 
     const fetchedDecision = fetched
-      ? detectRenderNeed(fetched.body, {
-          contentType: fetched.contentType,
-          statusCode: fetched.statusCode,
-        })
+      ? await timed("detectMs", () =>
+          detectRenderNeed(fetched.body, {
+            contentType: fetched.contentType,
+            statusCode: fetched.statusCode,
+          }),
+        )
       : undefined;
     const browserRequired = renderMode === true || screenshotRequested;
     const shouldRender = browserRequired || (renderMode === "auto" && fetchedDecision?.render);
@@ -111,11 +162,14 @@ export async function scrape(
             screenshotRequested
               ? candidate.screenshot !== undefined && candidate.html.trim().length > 0
               : isRenderedContentBetter(candidate, fetched, fetchedDecision);
-          const candidate = isFallbackRenderer(renderer)
-            ? await renderer.renderWithFallback(renderRequest, accept)
-            : await renderer.render(renderRequest);
+          const candidate = await timed("renderMs", () =>
+            isFallbackRenderer(renderer)
+              ? renderer.renderWithFallback(renderRequest, accept)
+              : renderer.render(renderRequest),
+          );
           if (browserRequired || isRenderedContentBetter(candidate, fetched, fetchedDecision)) {
             rendered = candidate;
+            timings.renderer = candidate.renderer;
           } else {
             warning = "Browser rendering did not improve the fetched content";
           }
@@ -133,10 +187,13 @@ export async function scrape(
     }
 
     deadline.throwIfExpired();
-    const rawHtml = absolutizeHtmlUrls(selectedHtml, finalUrl);
-    const extracted = extractDocument(rawHtml, {
-      baseUrl: finalUrl,
-      onlyMainContent: request.onlyMainContent ?? true,
+    const { rawHtml, extracted } = await timed("extractMs", () => {
+      const rawHtml = absolutizeHtmlUrls(selectedHtml, finalUrl);
+      const extracted = extractDocument(rawHtml, {
+        baseUrl: finalUrl,
+        onlyMainContent: request.onlyMainContent ?? true,
+      });
+      return { rawHtml, extracted };
     });
     const document = buildDocument(
       request,
