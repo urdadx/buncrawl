@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   claimCrawlUrl,
+  crawlLimitReached,
   createDb,
   discardDuplicateCrawlUrl,
   enqueueCrawlUrl,
@@ -8,6 +9,7 @@ import {
   finishCrawlUrl,
   getCrawlFrontier,
   getCrawlHost,
+  getJobEvents,
   migrateDb,
   recoverCrawlLeases,
   scheduleCrawlHost,
@@ -259,4 +261,43 @@ test("a second job crawling the same origin still gets its own host row", async 
   // Claiming requires the job's host row; the in-process host memo must not skip creating it.
   expect(await getCrawlHost(db, second.id, origin)).toBeDefined();
   expect((await claimCrawlUrl(db, second.id, "worker", 1000, limits))?.url).toBe(`${origin}/`);
+});
+
+test("emits page_completed for each finished page, but not for a fenced worker", async () => {
+  const { db, id } = await setup();
+  const origin = "https://site.example";
+  const now = new Date();
+  await enqueueCrawlUrl(db, id, { url: `${origin}/ok`, origin, depth: 0 }, limits, now);
+  await enqueueCrawlUrl(db, id, { url: `${origin}/bad`, origin, depth: 1 }, limits, now);
+  const ok = (await claimCrawlUrl(db, id, "worker", 1000, limits, now))!;
+  await finishCrawlUrl(db, ok, { state: "completed", byteSize: 1, finalUrl: `${origin}/ok/` }, now);
+  const later = new Date(now.getTime() + 10);
+  const bad = (await claimCrawlUrl(db, id, "worker", 1000, limits, later))!;
+  const error = { code: "HTTP_ERROR", message: "Page returned HTTP 404", retryable: false };
+  await finishCrawlUrl(db, bad, { state: "failed", byteSize: 0, error }, later);
+  // The lease was already finished, so a stale retry is rejected without a second event.
+  expect(await finishCrawlUrl(db, bad, { state: "completed", byteSize: 0 }, later)).toBe(false);
+
+  const pages = (await getJobEvents(db, id)).filter((event) => event.type === "page_completed");
+  expect(pages.map((event) => event.payload)).toEqual([
+    { url: `${origin}/ok`, depth: 0, state: "completed", finalUrl: `${origin}/ok/` },
+    { url: `${origin}/bad`, depth: 1, state: "failed", error },
+  ]);
+});
+
+test("reports which crawl limit was reached", async () => {
+  const { db, id } = await setup();
+  const origin = "https://site.example";
+  const now = new Date();
+  const roomy = { maxDepth: 2, maxPages: 5, maxBytes: 100, maxElapsedMs: 60_000 };
+  expect(await crawlLimitReached(db, id, roomy, now)).toBeUndefined();
+  await enqueueCrawlUrl(db, id, { url: `${origin}/a`, origin, depth: 1 }, roomy, now);
+  const lease = (await claimCrawlUrl(db, id, "worker", 1000, roomy, now))!;
+  await finishCrawlUrl(db, lease, { state: "completed", byteSize: 1 }, now);
+  expect(await crawlLimitReached(db, id, { ...roomy, maxPages: 1 }, now)).toBe("pages");
+  expect(await crawlLimitReached(db, id, { ...roomy, maxBytes: 1 }, now)).toBe("bytes");
+  // Time wins over the other limits, so a timeout is never mistaken for a finished crawl.
+  const late = new Date(now.getTime() + 60_000);
+  expect(await crawlLimitReached(db, id, { ...roomy, maxPages: 1 }, late)).toBe("time");
+  expect(await crawlLimitReached(db, "job_missing", roomy, now)).toBe("missing");
 });

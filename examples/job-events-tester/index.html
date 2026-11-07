@@ -655,7 +655,14 @@
 
     <script>
       const $ = (id) => document.getElementById(id);
-      const sseTypes = ["snapshot", "state_changed", "progress", "item_completed", "error"];
+      const sseTypes = [
+        "snapshot",
+        "state_changed",
+        "progress",
+        "item_completed",
+        "page_completed",
+        "error",
+      ];
       const terminal = ["completed", "failed", "cancelled"];
       const format = (value) => JSON.stringify(value, null, 2);
       const time = (date = new Date()) => date.toLocaleTimeString([], { hour12: false });
@@ -891,7 +898,7 @@
       }
       function progressText(progress = {}) {
         const done = (progress.succeeded ?? 0) + (progress.failed ?? 0) + (progress.cancelled ?? 0);
-        return `${done}/${progress.total ?? "?"} done · ✓${progress.succeeded ?? 0} ✗${progress.failed ?? 0}`;
+        return `${done}/${progress.total ?? "?"} done · ✓${progress.succeeded ?? 0} ✗${progress.failed ?? 0} · ${progress.running ?? 0} running · ${progress.queued ?? 0} queued`;
       }
       function describe(type, data) {
         if (typeof data !== "object" || !data) return String(data);
@@ -899,6 +906,10 @@
         if (type === "state_changed") return `→ ${data.state}`;
         if (type === "progress") return progressText(data.progress);
         if (type === "item_completed") return `item #${data.index} · ${data.itemId}`;
+        if (type === "page_completed")
+          return `${data.state === "failed" ? "✗" : "✓"} depth ${data.depth} · ${data.url}${
+            data.finalUrl && data.finalUrl !== data.url ? ` → ${data.finalUrl}` : ""
+          }${data.error ? ` · ${data.error.code}` : ""}`;
         if (type === "error") return `${data.error?.code}: ${data.error?.message}`;
         return "";
       }
@@ -933,7 +944,9 @@
         summary.append(el("span", describe(type, data)), el("span", time(), "time"));
         node.append(summary, el("pre", frame ?? format(data)));
         pushEntry(node, type);
-        if (typeof data === "object" && data?.state && terminal.includes(data.state)) {
+        // Only job-level events carry the job's state; page_completed has a per-page state.
+        const jobEvent = type === "snapshot" || type === "state_changed";
+        if (jobEvent && typeof data === "object" && terminal.includes(data?.state)) {
           lastState = data.state;
           renderJobPill();
           refreshStatus();

@@ -41,20 +41,30 @@ export function withinCrawlScope(candidate: string, scope: CrawlScope): boolean 
   return url.pathname === root.pathname || url.pathname.startsWith(prefix);
 }
 
+/**
+ * A page's depth is how many path segments it sits below the crawl's start URL, so sitemap and
+ * linked pages share one measure and maxDepth limits both. Pages outside the start path count as 0.
+ */
+export function crawlUrlDepth(url: string, root: string): number {
+  const segments = (value: string) => new URL(value).pathname.split("/").filter(Boolean).length;
+  return Math.max(0, segments(url) - segments(root));
+}
+
 export function discoveredCrawlUrls(
   links: readonly string[],
   base: string,
   scope: CrawlScope,
-  depth: number,
   maxDepth: number,
 ): string[] {
-  if (depth >= maxDepth) return [];
   return [
     ...new Set(
       links
         .filter((link) => !link.trim().startsWith("#"))
         .map((link) => canonicalCrawlUrl(link, base))
-        .filter((url): url is string => !!url && withinCrawlScope(url, scope)),
+        .filter(
+          (url): url is string =>
+            !!url && withinCrawlScope(url, scope) && crawlUrlDepth(url, scope.url) <= maxDepth,
+        ),
     ),
   ];
 }

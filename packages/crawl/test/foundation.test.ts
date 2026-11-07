@@ -4,6 +4,7 @@ import { createDb, enqueueJob, getCrawlFrontier, getCrawlHost, migrateDb } from 
 
 import {
   canonicalCrawlUrl,
+  crawlUrlDepth,
   discoveredCrawlUrls,
   discoverSitemapUrls,
   fetchCrawlPage,
@@ -31,11 +32,14 @@ test("canonicalizes discovered URLs and enforces origin and path scope", () => {
       ],
       scope.url,
       scope,
-      0,
       2,
     ),
   ).toEqual(["https://site.example/docs/a"]);
-  expect(discoveredCrawlUrls(["/docs/a"], scope.url, scope, 2, 2)).toEqual([]);
+  // maxDepth applies to each link's own path depth below the start URL.
+  expect(discoveredCrawlUrls(["/docs/a"], scope.url, scope, 0)).toEqual([]);
+  expect(
+    discoveredCrawlUrls(["/docs/a", "/docs/a/b/c"], "https://site.example/docs/x/y", scope, 1),
+  ).toEqual(["https://site.example/docs/a"]);
   expect(withinCrawlScope("https://site.example/docs-extra", scope)).toBe(false);
   expect(
     withinCrawlScope("https://badsite.example/docs", { ...scope, includeSubdomains: true }),
@@ -158,7 +162,6 @@ test("checks robots before redirects, enforces scope, and caps fetched page byte
   const options = {
     deadline: new Deadline(5000),
     scope: { url: "https://site.example" },
-    depth: 0,
     userAgent: "Buncrawl",
     resolver: async () => ["8.8.8.8"],
     fetchImpl,
@@ -188,20 +191,57 @@ test("queues only in-scope robots-allowed links and atomically deduplicates cycl
   const options = {
     deadline: new Deadline(5000),
     scope: { url: "https://site.example" },
-    depth: 0,
     limits: { maxDepth: 2, maxPages: 5, maxBytes: 1000, maxElapsedMs: 5000 },
     userAgent: "Buncrawl",
     resolver: async () => ["8.8.8.8"],
     fetchImpl: async () => new Response("User-agent: *\nDisallow: /private"),
   };
   const links = ["/a#one", "/a#two", "/private", "mailto:x@y.com", "https://evil.example/a"];
-  expect(await queueDiscoveredLinks(db, job.id, links, "https://site.example", 0, options)).toEqual(
-    ["https://site.example/a"],
+  expect(await queueDiscoveredLinks(db, job.id, links, "https://site.example", options)).toEqual([
+    "https://site.example/a",
+  ]);
+  expect(await queueDiscoveredLinks(db, job.id, links, "https://site.example/a", options)).toEqual(
+    [],
   );
-  expect(
-    await queueDiscoveredLinks(db, job.id, links, "https://site.example/a", 1, options),
-  ).toEqual([]);
   expect((await getCrawlFrontier(db, job.id)).map(({ url }) => url)).toEqual([
     "https://site.example/a",
+  ]);
+});
+
+test("measures depth as path segments below the start URL", () => {
+  expect(crawlUrlDepth("https://site.example/", "https://site.example")).toBe(0);
+  expect(crawlUrlDepth("https://site.example/events/", "https://site.example/")).toBe(1);
+  expect(crawlUrlDepth("https://site.example/venue/ashesi/?q=1", "https://site.example")).toBe(2);
+  expect(crawlUrlDepth("https://site.example/docs/a/b", "https://site.example/docs/")).toBe(2);
+  // A page outside the start path is never negative.
+  expect(crawlUrlDepth("https://site.example/about", "https://site.example/docs/guide")).toBe(0);
+});
+
+test("queues linked pages at their path depth, not their link distance", async () => {
+  const db = createDb({ DATABASE_URL: ":memory:" });
+  await migrateDb(db);
+  const { job } = await enqueueJob(db, {
+    submission: { type: "crawl", url: "https://site.example" },
+    limits: { maxItems: 10, timeoutMs: 60_000 },
+  });
+  const options = {
+    deadline: new Deadline(5000),
+    scope: { url: "https://site.example" },
+    limits: { maxDepth: 2, maxPages: 10, maxBytes: 1000, maxElapsedMs: 5000 },
+    userAgent: "Buncrawl",
+    resolver: async () => ["8.8.8.8"],
+    fetchImpl: async () => new Response("User-agent: *"),
+  };
+  // Found on a deep page, a shallow link keeps its own depth; links past maxDepth are skipped.
+  await queueDiscoveredLinks(
+    db,
+    job.id,
+    ["/about", "/blog/2026/", "/blog/2026/11/post"],
+    "https://site.example/blog/2026/11/other",
+    options,
+  );
+  expect((await getCrawlFrontier(db, job.id)).map(({ url, depth }) => [url, depth])).toEqual([
+    ["https://site.example/about", 1],
+    ["https://site.example/blog/2026/", 2],
   ]);
 });

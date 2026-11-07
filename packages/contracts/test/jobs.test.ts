@@ -152,4 +152,44 @@ describe("job outputs", () => {
       }).success,
     ).toBe(false);
   });
+
+  test("validates page_completed events for discovery pages", () => {
+    const page = { jobId, sequence: 3, timestamp, event: "page_completed" };
+    expect(
+      v.safeParse(jobEventSchema, {
+        ...page,
+        url: "https://example.com/a",
+        depth: 1,
+        state: "completed",
+        finalUrl: "https://www.example.com/a",
+      }).success,
+    ).toBe(true);
+    expect(
+      v.safeParse(jobEventSchema, {
+        ...page,
+        url: "https://example.com/b",
+        depth: 0,
+        state: "failed",
+        error: { code: "HTTP_ERROR", message: "Page returned HTTP 404", retryable: false },
+      }).success,
+    ).toBe(true);
+    for (const invalid of [
+      { url: "ftp://example.com/a", depth: 0, state: "completed" },
+      { url: "https://example.com/a", depth: -1, state: "completed" },
+      { url: "https://example.com/a", depth: 0, state: "cancelled" },
+    ])
+      expect(v.safeParse(jobEventSchema, { ...page, ...invalid }).success).toBe(false);
+  });
+
+  test("accepts page_completed as a webhook event filter", () => {
+    const webhook = {
+      url: "https://example.com/hook",
+      secret: "a-secret-at-least-16-characters",
+      events: ["state_changed", "progress", "item_completed", "page_completed", "error"],
+    };
+    expect(
+      v.safeParse(jobSubmissionSchema, { type: "crawl", url: "https://example.com", webhook })
+        .success,
+    ).toBe(true);
+  });
 });

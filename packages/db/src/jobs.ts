@@ -401,7 +401,7 @@ async function finishJobItem(
     throw new StaleJobLeaseError(input.itemId);
   }
   const [job] = await db.select().from(jobs).where(eq(jobs.id, item.jobId)).limit(1);
-  // A map/crawl job's single kickoff item is internal; its pages are reported through progress.
+  // A map/crawl job's single kickoff item is internal; its pages report page_completed instead.
   if (job && !isDiscoveryJob(job.type))
     await appendJobEvent(
       db,

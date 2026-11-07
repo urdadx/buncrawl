@@ -31,9 +31,11 @@ const webhookSchema = v.strictObject({
   secret: v.pipe(v.string(), v.minLength(16), v.maxLength(256)),
   events: v.optional(
     v.pipe(
-      v.array(v.picklist(["state_changed", "progress", "item_completed", "error"])),
+      v.array(
+        v.picklist(["state_changed", "progress", "item_completed", "page_completed", "error"]),
+      ),
       v.minLength(1),
-      v.maxLength(4),
+      v.maxLength(5),
     ),
   ),
 });
@@ -284,6 +286,21 @@ export const jobEventSchema = v.variant("event", [
     event: v.literal("item_completed"),
     itemId: jobItemIdSchema,
     index: nonNegativeInteger("Item index must be a non-negative integer"),
+  }),
+  // A map/crawl page finished fetching (and, for crawls, scraping); batch items use item_completed.
+  v.strictObject({
+    ...jobEventBase,
+    event: v.literal("page_completed"),
+    url: httpUrl,
+    depth: v.pipe(
+      v.number(),
+      v.integer("Depth must be an integer"),
+      v.minValue(0, "Depth must be non-negative"),
+      v.maxValue(MAX_CRAWL_DEPTH, `Depth cannot exceed ${MAX_CRAWL_DEPTH}`),
+    ),
+    state: v.picklist(["completed", "failed"]),
+    finalUrl: v.optional(httpUrl),
+    error: v.optional(jobErrorSchema),
   }),
   v.strictObject({
     ...jobEventBase,

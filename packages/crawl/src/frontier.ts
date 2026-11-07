@@ -3,7 +3,7 @@ import { enqueueCrawlUrl, type CrawlLimits, type Database } from "@buncrawl/db";
 import type { FetchPageOptions } from "@buncrawl/fetcher";
 
 import { loadRobots, robotsAllows } from "./robots";
-import { discoveredCrawlUrls, type CrawlScope } from "./urls";
+import { crawlUrlDepth, discoveredCrawlUrls, type CrawlScope } from "./urls";
 
 /** Accept only in-scope, robots-allowed links; SQLite enforces canonical deduplication and budgets. */
 export async function queueDiscoveredLinks(
@@ -11,7 +11,6 @@ export async function queueDiscoveredLinks(
   jobId: string,
   links: readonly string[],
   base: string,
-  depth: number,
   options: {
     scope: CrawlScope;
     limits: CrawlLimits;
@@ -21,13 +20,7 @@ export async function queueDiscoveredLinks(
     resolver?: FetchPageOptions["resolver"];
   },
 ): Promise<string[]> {
-  const discovered = discoveredCrawlUrls(
-    links,
-    base,
-    options.scope,
-    depth,
-    options.limits.maxDepth,
-  );
+  const discovered = discoveredCrawlUrls(links, base, options.scope, options.limits.maxDepth);
 
   const allowed: string[] = [];
 
@@ -39,7 +32,14 @@ export async function queueDiscoveredLinks(
 
     if (!robotsAllows(robots, url, options.userAgent)) continue;
 
-    if (await enqueueCrawlUrl(db, jobId, { url, origin, depth: depth + 1 }, options.limits)) {
+    if (
+      await enqueueCrawlUrl(
+        db,
+        jobId,
+        { url, origin, depth: crawlUrlDepth(url, options.scope.url) },
+        options.limits,
+      )
+    ) {
       allowed.push(url);
     }
   }

@@ -202,6 +202,18 @@ test("preserves completed map URLs when a discovered page fails", async () => {
     };
     expect(status.progress).toMatchObject({ succeeded: 1, failed: 1 });
     expect(status.items.some((item) => item.error?.code === "HTTP_ERROR")).toBe(true);
+    const pages = (await getJobEvents(db, jobId)).filter(
+      (event) => event.type === "page_completed",
+    );
+    expect(pages.map((event) => event.payload)).toEqual([
+      expect.objectContaining({ depth: 0, state: "completed" }),
+      expect.objectContaining({
+        url: `${origin}/bad`,
+        depth: 1,
+        state: "failed",
+        error: expect.objectContaining({ code: "HTTP_ERROR" }),
+      }),
+    ]);
   } finally {
     await worker.stop();
   }
@@ -333,7 +345,8 @@ test("deduplicates sitemap URLs that are already redirect targets and pages map 
     const submitted = await handler(
       new Request(`${base}/map`, {
         method: "POST",
-        body: JSON.stringify({ url: origin, maxUrls: 3, maxDepth: 0 }),
+        // Sitemap pages one path segment below the root are depth 1.
+        body: JSON.stringify({ url: origin, maxUrls: 3, maxDepth: 1 }),
       }),
     );
     const { jobId } = (await submitted.json()) as { jobId: string };
@@ -544,6 +557,13 @@ test("crawls each www/bare-domain page once and never exceeds maxPages", async (
     const events = await getJobEvents(db, jobId, 0, 1000);
     expect(events.at(-1)).toMatchObject({ type: "state_changed", payload: { state: "completed" } });
     expect(events.some((event) => event.type === "item_completed")).toBe(false);
+    // Each crawled page is reported once, before the terminal state.
+    const pages = events.filter((event) => event.type === "page_completed");
+    expect(pages).toHaveLength(4);
+    expect(pages.every((event) => (event.payload as { state: string }).state === "completed")).toBe(
+      true,
+    );
+    expect(new Set(pages.map((event) => (event.payload as { url: string }).url)).size).toBe(4);
     const progress = events.filter((event) => event.type === "progress");
     expect(progress.at(-1)?.payload).toEqual({ progress: result.progress });
   } finally {
@@ -664,6 +684,58 @@ test("ends an expired crawl with a durable deadline error", async () => {
       error?: { code: string };
     };
     expect(result.error?.code).toBe("DEADLINE_EXCEEDED");
+  } finally {
+    await worker.stop();
+  }
+});
+
+test("fails a crawl that runs out of time while waiting on a host delay", async () => {
+  const db = createDb({ DATABASE_URL: ":memory:" });
+  await migrateDb(db);
+  const handler = createDiscoveryHandler(db, "crawl", async () => {});
+  const worker = new DiscoveryWorker({
+    db,
+    dispatch,
+    // Idle page loops poll constantly, so they notice the deadline as early as the job timer does.
+    pollMs: 1,
+    resolver: async () => ["8.8.8.8"],
+    scrapeItem: async (request) => ({
+      success: true,
+      data: {
+        markdown: "page",
+        metadata: {
+          sourceURL: request.url,
+          finalURL: request.url,
+          statusCode: 200,
+          renderer: "fetch",
+        },
+      },
+    }),
+    fetchImpl: async (input) => {
+      const url = String(input);
+      if (url.endsWith("robots.txt")) return new Response("User-agent: *\nCrawl-delay: 30");
+      if (url.endsWith("sitemap.xml")) return new Response("", { status: 404 });
+      return new Response('<a href="/a">a</a><a href="/b">b</a>', {
+        headers: { "content-type": "text/html" },
+      });
+    },
+  });
+  try {
+    const submitted = await handler(
+      new Request(`${base}/crawl`, {
+        method: "POST",
+        body: JSON.stringify({ url: origin, maxPages: 5, timeoutMs: 400 }),
+      }),
+    );
+    const { jobId } = (await submitted.json()) as { jobId: string };
+    await worker.start();
+    await until(async () => ["completed", "failed"].includes((await getJob(db, jobId))!.state));
+    const job = (await getJob(db, jobId))!;
+    // The crawl delay leaves /a and /b queued at the deadline: that is a timeout, not a finished crawl.
+    expect({ state: job.state, code: job.error?.code }).toEqual({
+      state: "failed",
+      code: "DEADLINE_EXCEEDED",
+    });
   } finally {
     await worker.stop();
   }

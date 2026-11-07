@@ -227,12 +227,26 @@ export async function finishCrawlUrl(
     })
     .where(activeCrawlLease(lease, now))
     .returning({ url: crawlFrontier.url });
-  if (row && result.state === "completed" && result.finalUrl && result.finalUrl !== lease.url) {
+  if (!row) return false;
+  await appendJobEvent(
+    db,
+    lease.jobId,
+    "page_completed",
+    {
+      url: lease.url,
+      depth: lease.depth,
+      state: result.state,
+      ...(result.finalUrl ? { finalUrl: result.finalUrl } : {}),
+      ...(result.error ? { error: result.error } : {}),
+    },
+    now,
+  );
+  if (result.state === "completed" && result.finalUrl && result.finalUrl !== lease.url) {
     // The redirect target was just fetched; drop its queued copy instead of fetching it again.
     await db.run(sql`DELETE FROM crawl_frontier WHERE job_id = ${lease.jobId} AND state = 'queued'
       AND url IN (${result.finalUrl}, ${siteTwinUrl(result.finalUrl)})`);
   }
-  return Boolean(row);
+  return true;
 }
 
 /**
@@ -397,22 +411,21 @@ export async function remainingCrawlBytes(
   return Math.max(0, maxBytes - Number(rows[0]?.used ?? 0));
 }
 
-export async function crawlLimitsExhausted(
+/** Which crawl limit has been reached, if any; running out of time is a failure, not a finished crawl. */
+export async function crawlLimitReached(
   db: Database,
   jobId: string,
   limits: CrawlLimits,
   now = new Date(),
-): Promise<boolean> {
+): Promise<"missing" | "pages" | "bytes" | "time" | undefined> {
   const [row] = await db.all<{ pages: number; bytes: number; createdAt: number }>(sql`
     SELECT (SELECT count(*) FROM crawl_frontier WHERE job_id = ${jobId} AND state = 'completed') AS pages,
       (SELECT coalesce(sum(byte_size), 0) FROM crawl_frontier WHERE job_id = ${jobId}) AS bytes,
       created_at AS createdAt FROM jobs WHERE id = ${jobId}`);
-  return (
-    !row ||
-    Number(row.pages) >= limits.maxPages ||
-    Number(row.bytes) >= limits.maxBytes ||
-    Number(row.createdAt) + limits.maxElapsedMs <= now.getTime()
-  );
+  if (!row) return "missing";
+  if (Number(row.createdAt) + limits.maxElapsedMs <= now.getTime()) return "time";
+  if (Number(row.pages) >= limits.maxPages) return "pages";
+  if (Number(row.bytes) >= limits.maxBytes) return "bytes";
 }
 
 export async function saveCrawlRobots(

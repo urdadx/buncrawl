@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
+  claimCrawlUrl,
   createDb,
+  enqueueCrawlUrl,
   enqueueJob,
+  finishCrawlUrl,
   getJobEvents,
   migrateDb,
   pruneJobEvents,
@@ -114,5 +117,35 @@ describe("webhook deliveries", () => {
       "SELECT sequence FROM webhook_deliveries",
     );
     expect(deliveries.map((row) => row.sequence)).toEqual([2]);
+  });
+
+  test("delivers only page_completed events when a crawl subscribes to them", async () => {
+    const db = createDb({ DATABASE_URL: ":memory:" });
+    await migrateDb(db);
+    const origin = "https://example.com";
+    const { job } = await enqueueJob(db, {
+      submission: {
+        type: "crawl",
+        url: origin,
+        webhook: {
+          url: "https://example.com/hook",
+          secret: "a-secret-at-least-16-characters",
+          events: ["page_completed"],
+        },
+      },
+      limits: { maxItems: 1, timeoutMs: 1000 },
+    });
+    const limits = { maxDepth: 1, maxPages: 5, maxBytes: 1000, maxElapsedMs: 60_000 };
+    await enqueueCrawlUrl(db, job.id, { url: `${origin}/`, origin, depth: 0 }, limits);
+    const lease = (await claimCrawlUrl(db, job.id, "worker", 1000, limits))!;
+    await finishCrawlUrl(db, lease, { state: "completed", byteSize: 1 });
+
+    const events = await getJobEvents(db, job.id);
+    const page = events.find((event) => event.type === "page_completed")!;
+    expect(page.payload).toEqual({ url: `${origin}/`, depth: 0, state: "completed" });
+    const deliveries = await db.all<{ sequence: number }>(
+      "SELECT sequence FROM webhook_deliveries",
+    );
+    expect(deliveries.map((row) => row.sequence)).toEqual([page.sequence]);
   });
 });

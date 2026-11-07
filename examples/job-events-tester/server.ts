@@ -5,7 +5,13 @@ const target = new URL(Bun.env.BUNCRAWL_URL ?? "http://localhost:3000");
 const secret = Bun.env.TESTER_WEBHOOK_SECRET ?? randomBytes(32).toString("hex");
 const jobIdPattern = /^job_[0-9a-f]{32}$/;
 const routes = { batch_scrape: "batch/scrape", map: "map", crawl: "crawl" } as const;
-const webhookEvents = ["state_changed", "progress", "item_completed", "error"] as const;
+const webhookEvents = [
+  "state_changed",
+  "progress",
+  "item_completed",
+  "page_completed",
+  "error",
+] as const;
 const receiverModes = ["accept", "error", "timeout"] as const;
 /** Longer than Buncrawl's 10s delivery timeout, so "timeout" mode forces a retry. */
 const timeoutDelayMs = 11_000;

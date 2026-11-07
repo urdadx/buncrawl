@@ -15,7 +15,6 @@ export interface CrawlPageOptions {
   deadline: Deadline;
   scope: CrawlScope;
   limits: CrawlLimits;
-  depth: number;
   userAgent: string;
   fetchImpl?: FetchPageOptions["fetchImpl"];
   resolver?: FetchPageOptions["resolver"];
@@ -63,7 +62,6 @@ export async function fetchCrawlPage(
         extractLinks(page.body, page.finalUrl),
         page.finalUrl,
         options.scope,
-        options.depth,
         options.limits.maxDepth,
       )
     : [];

@@ -340,7 +340,9 @@ Build this work in dependency order. The first vertical slice is a durable `/v1/
 - Add tables for `crawl_frontier` and `crawl_hosts`.
 - Canonicalize HTTP(S) URLs and exclude `mailto:`, `tel:`, fragments, unsupported schemes, and out-of-scope URLs.
 - Atomically deduplicate frontier entries across redirects and discovered links.
-- Implement depth, page, byte, and elapsed-time limits.
+- Implement depth, page, byte, and elapsed-time limits. A page's depth is the number of path
+  segments below the start URL (`/events/` under `/` is 1; pages outside the start path are 0), the
+  same for sitemap and linked pages, so `maxDepth` (default 10) limits both.
 - Retrieve, parse, cache, and enforce `robots.txt` by user agent.
 - Parse sitemap and sitemap-index files with response-size, decompression, URL-count, and nesting limits; fetch sibling files with bounded concurrency and interleave capped results across leaves.
 - Enforce per-host concurrency, minimum delay, and robots crawl delay.
@@ -369,7 +371,10 @@ terminal event; heartbeats are SSE comments. Client disconnects stop only the st
 
 Optional submission field: `"webhook": { "url": "https://...", "secret": "..." }`
 (secret minimum 16 characters). An optional `events` array selects `state_changed`,
-`progress`, `item_completed`, and/or `error` events; omitting it delivers all events.
+`progress`, `item_completed`, `page_completed`, and/or `error` events; omitting it delivers all
+events. `item_completed` (`itemId`, `index`) is emitted per batch-scrape item; map and crawl jobs
+instead emit `page_completed` (`url`, `depth`, `state` of `completed` or `failed`, plus `finalUrl`
+after a redirect and `error` on failure) once per fetched page.
 Each selected durable event is delivered as JSON with
 `X-Buncrawl-Delivery: <jobId>:<sequence>`, `X-Buncrawl-Timestamp` (Unix milliseconds), and
 `X-Buncrawl-Signature: sha256=<hex HMAC-SHA256(secret, timestamp + "." + raw body)>`.

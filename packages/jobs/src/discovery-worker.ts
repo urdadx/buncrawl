@@ -9,6 +9,7 @@ import {
 import { Deadline } from "@buncrawl/core";
 import {
   canonicalCrawlUrl,
+  crawlUrlDepth,
   discoverSitemapUrls,
   fetchCrawlPage,
   loadRobots,
@@ -24,7 +25,7 @@ import {
   claimCrawlUrl,
   claimJobItem,
   completeJobItem,
-  crawlLimitsExhausted,
+  crawlLimitReached,
   discardDuplicateCrawlUrl,
   enqueueCrawlUrl,
   failJob,
@@ -78,7 +79,7 @@ function pageError(error: unknown, signal: AbortSignal): JobError {
 
 export function crawlJobLimits(request: DiscoverySubmission): CrawlLimits {
   return {
-    maxDepth: request.maxDepth ?? 2,
+    maxDepth: request.maxDepth ?? 10,
     maxPages: request.type === "map" ? (request.maxUrls ?? 100) : (request.maxPages ?? 100),
     maxBytes: request.maxBytes ?? 50 * 1024 * 1024,
     maxElapsedMs: request.timeoutMs ?? 120_000,
@@ -296,7 +297,12 @@ export class DiscoveryWorker {
             ? robots
             : await loadRobots(this.options.db, item.jobId, origin, userAgent, fetchOptions);
         if (robotsAllows(rules, url, userAgent))
-          await enqueueCrawlUrl(this.options.db, item.jobId, { url, origin, depth: 0 }, limits);
+          await enqueueCrawlUrl(
+            this.options.db,
+            item.jobId,
+            { url, origin, depth: crawlUrlDepth(url, root) },
+            limits,
+          );
       }
       await syncCrawlProgress(this.options.db, item.jobId);
       await Promise.all(
@@ -391,8 +397,12 @@ export class DiscoveryWorker {
       if (!lease) {
         const progress = await syncCrawlProgress(this.options.db, jobId);
         if (progress.queued === 0 && progress.running === 0) return;
-        if (await crawlLimitsExhausted(this.options.db, jobId, limits)) {
+        const limit = await crawlLimitReached(this.options.db, jobId, limits);
+        if (limit) {
           await cancelQueuedCrawlUrls(this.options.db, jobId);
+          // The job timer may not have fired yet; aborting now makes a timeout fail the same way
+          // whichever check notices it first.
+          if (limit === "time") controller.abort();
           return;
         }
         await Bun.sleep(this.pollMs);
@@ -443,7 +453,6 @@ export class DiscoveryWorker {
         deadline,
         scope,
         limits,
-        depth: lease.depth,
         userAgent,
         byteBudget: lease.byteBudget,
         fetchImpl: this.options.fetchImpl,
@@ -477,7 +486,7 @@ export class DiscoveryWorker {
         const document = this.options.persistDocument
           ? await this.options.persistDocument(response.data)
           : response.data;
-        await queueDiscoveredLinks(this.options.db, jobId, page.links, page.finalUrl, lease.depth, {
+        await queueDiscoveredLinks(this.options.db, jobId, page.links, page.finalUrl, {
           scope,
           limits,
           userAgent,
@@ -495,7 +504,7 @@ export class DiscoveryWorker {
         )
           throw new StaleJobLeaseError(lease.url);
       } else {
-        await queueDiscoveredLinks(this.options.db, jobId, page.links, page.finalUrl, lease.depth, {
+        await queueDiscoveredLinks(this.options.db, jobId, page.links, page.finalUrl, {
           scope,
           limits,
           userAgent,
