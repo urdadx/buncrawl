@@ -130,6 +130,7 @@ Detector classifies returned HTML
 - Lightpanda is preferred when its executable is available; Bun.WebView is the availability fallback.
 - A Lightpanda runtime failure triggers a Chromium attempt when WebView is available.
 - Lightpanda output that fails quality checks escalates to Chromium within the same deadline.
+- In `renderJs: "auto"` mode, where a render must beat the fetched page, Lightpanda and Chromium start together when a Chromium worker is idle and the first accepted result wins; forced renders and screenshots stay sequential. Losing renders are left to finish within the deadline rather than killing their warm worker.
 - Lightpanda runs as a subprocess and inherits the request deadline and cancellation signal.
 - Browser rendering runs in dedicated Bun worker subprocesses with one active view per worker.
 - The worker pool bounds concurrency and queued requests, and recycles workers by page count or RSS.

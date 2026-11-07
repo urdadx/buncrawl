@@ -1,9 +1,3 @@
-/**
- * Renders pages through one long-lived `lightpanda serve` process over CDP. Starting a fresh
- * `lightpanda fetch` costs about 500ms of browser setup per page; a warm server opens a new browser
- * context in about 10ms. Each page still gets its own isolated context.
- */
-
 export interface CdpNotification {
   method: string;
   params: Record<string, unknown>;

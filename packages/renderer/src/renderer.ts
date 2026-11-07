@@ -40,4 +40,6 @@ export interface Renderer {
   readonly name: string;
   capabilities(): RendererCapabilities;
   render(request: RenderRequest): Promise<RenderResult>;
+  /** Whether a render could start now without queueing; used to decide whether to race renderers. */
+  hasIdleCapacity?(): boolean;
 }

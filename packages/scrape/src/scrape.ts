@@ -207,7 +207,13 @@ async function scrapeWithTimings(
               : isRenderedContentBetter(candidate, fetched, fetchedDecision);
           const candidate = await timed("renderMs", () =>
             isFallbackRenderer(renderer)
-              ? renderer.renderWithFallback(renderRequest, accept)
+              ? renderer.renderWithFallback(
+                  renderRequest,
+                  accept,
+                  // In auto mode a render must beat the fetched page and Lightpanda's often does not,
+                  // so start the fallback renderer alongside it while it has spare capacity.
+                  fetched && !browserRequired ? { startFallbackAfterMs: 0 } : {},
+                )
               : renderer.render(renderRequest),
           );
           if (browserRequired || isRenderedContentBetter(candidate, fetched, fetchedDecision)) {

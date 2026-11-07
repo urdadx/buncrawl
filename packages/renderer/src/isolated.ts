@@ -108,6 +108,11 @@ export class IsolatedRenderer implements Renderer {
     return this.rendererCapabilities;
   }
 
+  hasIdleCapacity(): boolean {
+    if (this.closed || this.queue.length > 0) return false;
+    return this.workers.some((worker) => !worker.busy) || this.workers.length < this.maxWorkers;
+  }
+
   // render sends a render request to the renderer pool and returns a promise that resolves with the render result. It checks if the renderer is closed, if the request's deadline has expired or been aborted, and if there is capacity in the queue. If any of these conditions are not met, it rejects the promise with an appropriate error. Otherwise, it creates a new job for the request, adds it to the queue, and calls the drain method to process the queue.
   render(request: RenderRequest): Promise<RenderResult> {
     if (this.closed) return Promise.reject(new Error("Renderer pool is closed"));
