@@ -148,6 +148,8 @@ Detector classifies returned HTML
 - Chrome proxy configuration is process-scoped and requires isolated Bun processes for different proxies.
 - Browser availability is optional; HTTP-only scraping must still work without Lightpanda or Chrome.
 - Main-content extraction compares deterministic cleanup with Readability and only accepts Readability when quality improves without excessive content loss.
+- Extraction runs on a bounded pool of Bun worker threads so parsing never blocks the event loop; a deadline terminates its worker, and extraction falls back to the main thread when workers cannot start.
+- Scrape results are cached in SQLite only on request: a scrape is served from cache when the client sends `maxAge` (ms, up to 30 days) and a result at most that old exists; without `maxAge` it always scrapes fresh. Successful results are stored unless `storeInCache: false`. The cache key covers the URL and every option that changes the output; screenshot requests are never cached. Entries older than 30 days, and the oldest beyond 10,000 entries, are pruned hourly.
 - The current product target is self-hosted deployment; commercial multi-tenant infrastructure is deferred.
 - Drizzle with libSQL is the persistence layer: a local SQLite file is the default and Turso is an optional remote database.
 - SQLite/libSQL is authoritative for job state, results, cancellation, progress, and crawl-frontier state.

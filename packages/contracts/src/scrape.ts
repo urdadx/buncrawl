@@ -1,5 +1,8 @@
 import * as v from "valibot";
 
+/** Cached scrape results are kept, and may be requested, for at most 30 days. */
+export const MAX_CACHE_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
 const screenshotViewportSchema = v.strictObject({
   width: v.pipe(
     v.number(),
@@ -62,6 +65,17 @@ export const scrapeRequestSchema = v.strictObject({
       v.maxValue(120_000, "Timeout cannot exceed 120000ms"),
     ),
   ),
+  /** Accept a cached result scraped at most this many milliseconds ago; 0 (default) scrapes fresh. */
+  maxAge: v.optional(
+    v.pipe(
+      v.number(),
+      v.integer("maxAge must be an integer"),
+      v.minValue(0, "maxAge cannot be negative"),
+      v.maxValue(MAX_CACHE_AGE_MS, `maxAge cannot exceed ${MAX_CACHE_AGE_MS}ms`),
+    ),
+  ),
+  /** Store a successful result for later maxAge requests; defaults to true. */
+  storeInCache: v.optional(v.boolean()),
 });
 
 export type ScrapeFormat = v.InferOutput<typeof scrapeFormatSchema>;
@@ -85,6 +99,10 @@ export const scrapeDocumentSchema = v.strictObject({
     statusCode: v.pipe(v.number(), v.integer()),
     contentType: v.optional(v.string()),
     renderer: v.string(),
+    /** Present when the request set maxAge: whether the result came from the cache. */
+    cacheState: v.optional(v.picklist(["hit", "miss"])),
+    /** When a cached result was originally scraped (ISO 8601); only on cache hits. */
+    cachedAt: v.optional(v.string()),
   }),
 });
 

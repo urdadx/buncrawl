@@ -36,3 +36,4 @@ export * from "./crawl";
 export * from "./jobs";
 export * from "./migrate";
 export * from "./schema";
+export * from "./scrape-cache";

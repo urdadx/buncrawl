@@ -17,6 +17,18 @@ export async function migrateDb(db: Database): Promise<void> {
   `);
   await db.run(sql`CREATE INDEX IF NOT EXISTS artifacts_expires_at_idx ON artifacts (expires_at)`);
   await db.run(sql`
+    CREATE TABLE IF NOT EXISTS scrape_cache (
+      key TEXT PRIMARY KEY NOT NULL,
+      url TEXT NOT NULL,
+      document_json TEXT NOT NULL,
+      byte_size INTEGER NOT NULL CHECK (byte_size >= 0),
+      created_at INTEGER NOT NULL
+    )
+  `);
+  await db.run(
+    sql`CREATE INDEX IF NOT EXISTS scrape_cache_created_at_idx ON scrape_cache (created_at)`,
+  );
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS jobs (
       id TEXT PRIMARY KEY NOT NULL,
       type TEXT NOT NULL CHECK (type IN ('batch_scrape', 'map', 'crawl')),

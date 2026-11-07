@@ -21,6 +21,8 @@ import {
 } from "@buncrawl/renderer";
 import { type DnsResolver, validateResolvedUrl } from "@buncrawl/security";
 
+import { scrapeCacheKey, type ScrapeCache } from "./cache";
+
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_FORMATS: ScrapeFormat[] = ["markdown"];
 let defaultRenderer: Renderer | undefined;
@@ -32,6 +34,8 @@ export interface ScrapeDependencies {
   renderer?: Renderer;
   /** Runs HTML extraction; defaults to the shared worker pool so parsing never blocks the event loop. */
   extract?: (job: ExtractJob, signal: AbortSignal) => Promise<ExtractJobOutput>;
+  /** Serves `maxAge` requests from earlier results and stores new successful ones. */
+  cache?: ScrapeCache;
 }
 
 export interface ScrapeContext {
@@ -71,7 +75,39 @@ export async function scrape(
     }
   };
   try {
-    return await scrapeWithTimings(request, context, dependencies, timed, timings);
+    const cache = dependencies.cache;
+    const cacheKey = cache ? scrapeCacheKey(request) : undefined;
+    const maxAge = request.maxAge ?? 0;
+    if (cache && cacheKey && maxAge > 0) {
+      const hit = await cache.get(cacheKey, maxAge).catch((error: unknown) => {
+        console.warn("Scrape cache read failed; scraping fresh", error);
+        return undefined;
+      });
+      if (hit) {
+        timings.renderer = "cache";
+        const metadata = { ...hit.document.metadata, cacheState: "hit" as const };
+        return {
+          success: true,
+          data: {
+            ...hit.document,
+            metadata: { ...metadata, cachedAt: hit.cachedAt.toISOString() },
+          },
+        };
+      }
+    }
+
+    const response = await scrapeWithTimings(request, context, dependencies, timed, timings);
+    if (!response.success || !cache || !cacheKey) return response;
+    if (request.storeInCache !== false) {
+      await cache.set(cacheKey, request.url, response.data).catch((error: unknown) => {
+        console.warn("Scrape cache write failed", error);
+      });
+    }
+    if (maxAge === 0) return response;
+    return {
+      ...response,
+      data: { ...response.data, metadata: { ...response.data.metadata, cacheState: "miss" } },
+    };
   } finally {
     context.onTimings?.({ ...timings, totalMs: performance.now() - startedAt });
   }

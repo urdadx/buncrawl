@@ -1,6 +1,14 @@
-import { endpoint } from "../http";
-import { handleScrape } from "./v1/scrape";
+import { createScrapeCache, type Database } from "@buncrawl/db";
+import { scrape } from "@buncrawl/scrape";
 
-export const scrapeRoutes = {
-  "/v1/scrape": endpoint(handleScrape),
-};
+import { endpoint } from "../http";
+import { createScrapeHandler } from "./v1/scrape";
+
+export function scrapeRoutes(db: Database) {
+  const cache = createScrapeCache(db);
+  return {
+    "/v1/scrape": endpoint(
+      createScrapeHandler((request, context) => scrape(request, context, { cache })),
+    ),
+  };
+}

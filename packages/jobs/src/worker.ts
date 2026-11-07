@@ -10,6 +10,7 @@ import {
   StaleJobLeaseError,
   type Database,
   type LeasedJobItem,
+  createScrapeCache,
 } from "@buncrawl/db";
 import { scrape } from "@buncrawl/scrape";
 
@@ -46,7 +47,9 @@ export class JobWorker {
   /** Configure the database-backed worker, its concurrency limits, and optional Redis dispatch. */
   constructor(options: WorkerOptions) {
     this.db = options.db;
-    this.runScrape = options.scrapeItem ?? ((request, signal) => scrape(request, { signal }));
+    const cache = createScrapeCache(options.db);
+    this.runScrape =
+      options.scrapeItem ?? ((request, signal) => scrape(request, { signal }, { cache }));
     this.persistDocument = options.persistDocument ?? (async (document) => document);
     this.dispatch = options.dispatch ?? new RedisJobDispatch();
     this.concurrency = options.concurrency ?? 5;

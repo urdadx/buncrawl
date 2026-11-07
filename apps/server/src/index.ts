@@ -1,5 +1,5 @@
 import { DiscoveryWorker, JobWorker, WebhookWorker } from "@buncrawl/jobs";
-import { pruneJobEvents } from "@buncrawl/db";
+import { pruneJobEvents, pruneScrapeCache } from "@buncrawl/db";
 
 import { corsHeaders, endpoint } from "./http";
 import { createRoutes } from "./routes";
@@ -17,8 +17,9 @@ async function startRuntime(previous: ServerRuntime | undefined): Promise<Server
   await discoveryWorker.start();
   const webhooks = new WebhookWorker(db);
   webhooks.start();
-  await pruneJobEvents(db);
-  const retention = setInterval(() => void pruneJobEvents(db).catch(console.error), 60 * 60 * 1000);
+  const prune = () => Promise.all([pruneJobEvents(db), pruneScrapeCache(db)]);
+  await prune();
+  const retention = setInterval(() => void prune().catch(console.error), 60 * 60 * 1000);
 
   const signals = ["SIGINT", "SIGTERM"] as const;
   let stopping: Promise<void> | undefined;

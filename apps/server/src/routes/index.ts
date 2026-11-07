@@ -13,7 +13,7 @@ export function createRoutes(db: Database) {
   return {
     ...healthRoutes,
     ...trpcRoutes,
-    ...scrapeRoutes,
+    ...scrapeRoutes(db),
     ...batchScrapeRoutes(db),
     ...mapRoutes(db),
     ...crawlRoutes(db),
