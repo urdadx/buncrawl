@@ -363,6 +363,101 @@
         height: 12px;
         accent-color: var(--accent);
       }
+      .brand {
+        margin: 10px 0;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--inset);
+      }
+      .brand h3 {
+        margin: 0 0 8px;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+      }
+      .brand-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .brand-logo {
+        display: flex;
+        align-items: center;
+        min-height: 56px;
+        padding: 8px 12px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
+      .brand-logo img {
+        max-height: 40px;
+        max-width: 220px;
+      }
+      .swatches {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .swatch {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+      }
+      .swatch i {
+        flex: none;
+        width: 28px;
+        height: 28px;
+        border: 1px solid var(--border-strong);
+        border-radius: 6px;
+      }
+      .swatch span {
+        display: grid;
+        line-height: 1.3;
+      }
+      .brand-fonts {
+        display: grid;
+        gap: 4px;
+        margin-bottom: 12px;
+      }
+      .brand-fonts div {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .brand-fonts small {
+        display: inline;
+        margin: 0;
+        color: var(--muted);
+      }
+      .brand-components {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        padding: 12px;
+        margin-bottom: 8px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
+      .brand-components .sample-button,
+      .brand-components .sample-input {
+        padding: 8px 16px;
+        font: inherit;
+        font-size: 14px;
+        border-width: 1px;
+        border-style: solid;
+        border-color: transparent;
+        cursor: default;
+      }
+      .brand-components .sample-input {
+        min-width: 160px;
+        text-align: left;
+      }
       .result {
         padding: 12px;
         margin: 10px 0;
@@ -464,6 +559,10 @@
               <input id="sseUrl" type="url" required value="https://example.com" data-persist />
             </div>
           </div>
+          <label class="check"
+            ><input type="checkbox" id="sseBranding" data-persist /> Measure branding (batch scrape
+            and crawl)</label
+          >
           <button class="full" type="submit">Submit &amp; stream</button>
         </form>
         <form class="card" id="attach">
@@ -594,6 +693,10 @@
                 <input id="whUrl" type="url" required value="https://example.com" data-persist />
               </div>
             </div>
+            <label class="check"
+              ><input type="checkbox" id="whBranding" data-persist /> Measure branding (batch scrape
+              and crawl)</label
+            >
             <label>Events to deliver</label>
             <div id="whEvents"></div>
             <button class="full" type="submit">Submit with webhook</button>
@@ -730,10 +833,21 @@
 
       // Persist simple form fields so repeated test runs need no retyping.
       for (const field of document.querySelectorAll("[data-persist]")) {
+        const key = field.type === "checkbox" ? "checked" : "value";
         const saved = store.get(field.id);
-        if (saved !== null) field.value = saved;
-        field.addEventListener("change", () => store.set(field.id, field.value));
+        if (saved !== null) field[key] = field.type === "checkbox" ? saved === "true" : saved;
+        field.addEventListener("change", () => store.set(field.id, String(field[key])));
       }
+      // Map jobs list URLs without scraping them, so they have no pages to measure.
+      for (const [select, box] of [
+        ["sseType", "sseBranding"],
+        ["whType", "whBranding"],
+      ]) {
+        const sync = () => ($(box).disabled = $(select).value === "map");
+        $(select).addEventListener("change", sync);
+        sync();
+      }
+      const wantsBranding = (box) => $(box).checked && !$(box).disabled;
 
       /* ---------- Tabs ---------- */
       const tabs = [...document.querySelectorAll('[role="tab"]')];
@@ -1084,7 +1198,11 @@
         const button = event.submitter;
         button.disabled = true;
         try {
-          await submitJob({ type: $("sseType").value, url: $("sseUrl").value });
+          await submitJob({
+            type: $("sseType").value,
+            url: $("sseUrl").value,
+            ...(wantsBranding("sseBranding") ? { branding: true } : {}),
+          });
           connect();
         } catch (error) {
           system(`Submit failed: ${error.message}`);
@@ -1206,6 +1324,7 @@
             url: $("whUrl").value,
             webhookUrl,
             ...(all ? {} : { events }),
+            ...(wantsBranding("whBranding") ? { branding: true } : {}),
           });
           $("whStatus").textContent =
             `Submitted ${result.jobId} (${result.state}). Deliveries appear below as they arrive.`;
@@ -1364,11 +1483,133 @@
               `${metadata.title ?? "Untitled"} · HTTP ${metadata.statusCode ?? "?"} · ${metadata.renderer ?? "unknown renderer"}`,
             ),
           );
+          if (doc.branding) node.append(renderBranding(doc.branding));
           if (doc.markdown) node.append(details("Markdown result", doc.markdown));
           node.append(details("Full document JSON (including artifact keys)", format(doc)));
         }
         return node;
       }
+      /* ---------- Branding ---------- */
+      // Values come from the scraped page, so only well-formed colors, sizes and image URLs are
+      // applied as styles or sources; everything else is shown as text.
+      const hexColor = (value) => (/^#[0-9a-f]{6}$/i.test(value ?? "") ? value : undefined);
+      const cssLength = (value) =>
+        /^\d+(\.\d+)?(px|%|rem|em)$/.test(value ?? "") ? value : undefined;
+      const imageUrl = (value) =>
+        /^(https?:|data:image\/)/i.test(value ?? "") ? value : undefined;
+      function renderBranding(brand) {
+        const node = el("section", undefined, "brand");
+        const head = el("div", undefined, "brand-head");
+        const logo = imageUrl(brand.logo);
+        if (logo) {
+          const tile = el("div", undefined, "brand-logo");
+          tile.style.background = hexColor(brand.colors?.background) ?? "#fff";
+          const img = el("img");
+          img.src = logo;
+          img.alt = brand.images?.logoAlt ?? `${brand.brandName ?? "Site"} logo`;
+          img.referrerPolicy = "no-referrer";
+          tile.append(img);
+          head.append(tile);
+        }
+        const title = el("div");
+        title.append(el("strong", brand.brandName ?? "Unnamed brand"));
+        title.append(el("p", `${brand.colorScheme ?? "unknown"} color scheme`));
+        const favicon = imageUrl(brand.images?.favicon);
+        if (favicon) {
+          const link = el("a", "favicon");
+          link.href = favicon;
+          link.target = "_blank";
+          link.rel = "noreferrer";
+          title.append(link);
+        }
+        const ogImage = imageUrl(brand.images?.ogImage);
+        if (ogImage && favicon) title.append(" · ");
+        if (ogImage) {
+          const link = el("a", "og:image");
+          link.href = ogImage;
+          link.target = "_blank";
+          link.rel = "noreferrer";
+          title.append(link);
+        }
+        head.append(title);
+        node.append(head);
+
+        const colors = Object.entries(brand.colors ?? {}).filter(([, value]) => hexColor(value));
+        if (colors.length) {
+          node.append(el("h3", "Colors"));
+          const swatches = el("div", undefined, "swatches");
+          for (const [name, value] of colors) {
+            const swatch = el("div", undefined, "swatch");
+            const chip = el("i");
+            chip.style.background = value;
+            const label = el("span");
+            label.append(el("strong", name), el("code", value));
+            swatch.append(chip, label);
+            swatches.append(swatch);
+          }
+          node.append(swatches);
+        }
+
+        const typography = brand.typography ?? {};
+        const families = Object.entries(typography.fontFamilies ?? {});
+        if (families.length) {
+          node.append(el("h3", "Typography"));
+          const list = el("div", undefined, "brand-fonts");
+          for (const [role, family] of families) {
+            const row = el("div");
+            const sample = el("span", `${family} — The quick brown fox`);
+            sample.style.fontFamily = `"${String(family).replace(/"/g, "")}", system-ui`;
+            const size = typography.fontSizes?.[role === "primary" ? "body" : "h1"];
+            row.append(el("small", `${role}: `), sample);
+            if (size) row.append(el("small", ` · ${size}`));
+            list.append(row);
+          }
+          const scale = typography.fontSizes ?? {};
+          if (Object.keys(scale).length)
+            list.append(
+              el(
+                "small",
+                `Sizes ${Object.entries(scale)
+                  .map(([key, value]) => `${key} ${value}`)
+                  .join(
+                    " · ",
+                  )}${brand.spacing?.baseUnit ? ` · ${brand.spacing.baseUnit}px grid` : ""}`,
+              ),
+            );
+          node.append(list);
+        }
+
+        const components = brand.components ?? {};
+        const samples = [
+          ["buttonPrimary", "Primary button", "button"],
+          ["buttonSecondary", "Secondary button", "button"],
+          ["input", "Input field", "input"],
+        ].filter(([key]) => components[key]);
+        if (samples.length) {
+          node.append(el("h3", "Components"));
+          const row = el("div", undefined, "brand-components");
+          row.style.background = hexColor(brand.colors?.background) ?? "#fff";
+          for (const [key, label, kind] of samples) {
+            const spec = components[key];
+            const sample = el("span", label, kind === "button" ? "sample-button" : "sample-input");
+            sample.style.background = hexColor(spec.background) ?? "transparent";
+            sample.style.color =
+              hexColor(spec.textColor) ?? hexColor(brand.colors?.textPrimary) ?? "#000";
+            if (hexColor(spec.borderColor)) sample.style.borderColor = spec.borderColor;
+            const radius = cssLength(spec.borderRadius);
+            if (radius) sample.style.borderRadius = radius;
+            const family = typography.fontFamilies?.primary;
+            if (family)
+              sample.style.fontFamily = `"${String(family).replace(/"/g, "")}", system-ui`;
+            sample.title = format(spec);
+            row.append(sample);
+          }
+          node.append(row);
+        }
+        node.append(details("Branding JSON", format(brand)));
+        return node;
+      }
+
       const fetchStatus = (cursor = 0) =>
         api(`/api/jobs/${job.type}/${job.id}?cursor=${cursor}&limit=100`);
       async function refreshStatus() {

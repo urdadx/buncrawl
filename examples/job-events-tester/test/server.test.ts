@@ -7,7 +7,7 @@ const upstream = Bun.serve({
   port: 0,
   async fetch(request) {
     const url = new URL(request.url);
-    if (url.pathname === "/v1/batch/scrape") {
+    if (url.pathname === "/v1/batch/scrape" || url.pathname === "/v1/crawl") {
       submitted = await request.json();
       return Response.json({ jobId: `job_${"a".repeat(32)}`, state: "queued" }, { status: 202 });
     }
@@ -53,6 +53,26 @@ afterAll(() => {
 });
 
 describe("job event tester", () => {
+  test("asks Buncrawl for branding on batch scrapes and crawls, but not maps", async () => {
+    const url = "https://example.com";
+    expect(
+      (await postJson("/api/submit", { type: "batch_scrape", url, branding: true })).status,
+    ).toBe(202);
+    expect(submitted).toEqual({ requests: [{ url, formats: ["markdown", "branding"] }] });
+    expect((await postJson("/api/submit", { type: "crawl", url, branding: true })).status).toBe(
+      202,
+    );
+    expect(submitted).toEqual({ url, scrapeOptions: { formats: ["markdown", "branding"] } });
+    // Without the option the request is unchanged.
+    await postJson("/api/submit", { type: "crawl", url });
+    expect(submitted).toEqual({ url });
+    const map = await postJson("/api/submit", { type: "map", url, branding: true });
+    expect(map.status).toBe(400);
+    expect(await map.json()).toMatchObject({
+      error: expect.stringContaining("batch scrape or crawl"),
+    });
+  });
+
   test("submits a job and proxies its SSE stream", async () => {
     const response = await fetch(new URL("/api/submit", local), {
       method: "POST",

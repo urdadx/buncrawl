@@ -180,6 +180,7 @@ async function submitJob(request: Request): Promise<Response> {
     url?: string;
     webhookUrl?: string;
     events?: unknown;
+    branding?: unknown;
   }>(request);
   if (!input) return error(400, "Invalid JSON");
   if (!Object.hasOwn(routes, input.type ?? "")) return error(400, "Invalid job type");
@@ -210,10 +211,16 @@ async function submitJob(request: Request): Promise<Response> {
     }
   }
   const type = input.type as JobType;
+  if (input.branding === true && type === "map")
+    return error(400, "Branding needs scraped pages: use a batch scrape or crawl");
+  // Branding is measured on top of the default Markdown result.
+  const formats = input.branding === true ? { formats: ["markdown", "branding"] } : {};
   const body =
     type === "batch_scrape"
-      ? { requests: [{ url: input.url }], ...(webhook && { webhook }) }
-      : { url: input.url, ...(webhook && { webhook }) };
+      ? { requests: [{ url: input.url, ...formats }], ...(webhook && { webhook }) }
+      : type === "crawl" && input.branding === true
+        ? { url: input.url, scrapeOptions: formats, ...(webhook && { webhook }) }
+        : { url: input.url, ...(webhook && { webhook }) };
   try {
     const response = await fetch(new URL(`/v1/${routes[type]}`, target), {
       method: "POST",
