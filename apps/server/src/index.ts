@@ -1,5 +1,6 @@
 import { DiscoveryWorker, JobWorker, WebhookWorker } from "@buncrawl/jobs";
 import { pruneJobEvents, pruneScrapeCache } from "@buncrawl/db";
+import { checkRendererCapabilities, type RendererCapabilityReport } from "@buncrawl/renderer";
 
 import { corsHeaders, endpoint } from "./http";
 import { createRoutes } from "./routes";
@@ -35,13 +36,27 @@ async function startRuntime(previous: ServerRuntime | undefined): Promise<Server
   return { db, stop };
 }
 
+/** Logs which browser renderers this host can run; HTTP-only scraping works without any. */
+async function checkRenderers(): Promise<RendererCapabilityReport> {
+  const report = await checkRendererCapabilities();
+  for (const renderer of report.renderers) {
+    if (renderer.capabilities.available) {
+      console.info(`Renderer ${renderer.name}: ${renderer.version} (${renderer.executable})`);
+    } else {
+      console.warn(`Renderer ${renderer.name} unavailable: ${renderer.error}`);
+    }
+  }
+  return report;
+}
+
 async function main(): Promise<void> {
+  const capabilities = checkRenderers();
   await replaceRuntime(startRuntime);
 
   // Under `bun --hot`, a repeated Bun.serve() call reloads the running server's handlers in place.
   const server = Bun.serve({
     idleTimeout: SERVER_IDLE_TIMEOUT_SECONDS,
-    routes: createRoutes(db),
+    routes: createRoutes(db, capabilities),
     fetch: endpoint(() => new Response("Not Found", { status: 404 })),
     error(error) {
       console.error(error);

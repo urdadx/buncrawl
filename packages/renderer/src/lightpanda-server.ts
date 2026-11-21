@@ -85,7 +85,10 @@ export class LightpandaServer {
       const html = await evaluate(connection, sessionId, "document.documentElement.outerHTML");
       const finalUrl = await evaluate(connection, sessionId, "location.href");
       // Redirects reuse the main frame; the last main-frame document is the page that rendered.
-      const status = documents.filter((doc) => doc.frameId === navigation.frameId).at(-1)?.status;
+      // A data: document has no HTTP response; report 200 for it, as `lightpanda fetch` does.
+      const status =
+        documents.filter((doc) => doc.frameId === navigation.frameId).at(-1)?.status ??
+        (url.startsWith("data:") ? 200 : undefined);
       if (
         typeof html !== "string" ||
         typeof finalUrl !== "string" ||

@@ -8,6 +8,17 @@ import type { RenderRequest, Renderer, RendererCapabilities, RenderResult } from
 
 const DEFAULT_WAIT_MS = 2000;
 
+/**
+ * The Lightpanda executable to launch: `BUNCRAWL_LIGHTPANDA_PATH`, else `lightpanda` on `PATH`.
+ * Returns the resolved path, or null when it is not an executable.
+ */
+export function resolveLightpandaExecutable(
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  const executable = env.BUNCRAWL_LIGHTPANDA_PATH || "lightpanda";
+  return Bun.which(executable, env.PATH === undefined ? {} : { PATH: env.PATH });
+}
+
 interface LightpandaOutput {
   url?: unknown;
   http_status?: unknown;

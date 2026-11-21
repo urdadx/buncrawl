@@ -1,5 +1,6 @@
 export * from "./branding";
 export * from "./browser-safety";
+export * from "./capabilities";
 export * from "./chain";
 export * from "./detector";
 export * from "./isolated";

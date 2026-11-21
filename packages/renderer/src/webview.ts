@@ -102,6 +102,7 @@ export class WebViewRenderer implements Renderer {
   readonly name = "webview";
 
   private readonly backend?: WebViewBackend;
+  private readonly chromePath?: string;
   private readonly launchBackend?: WebViewOptions["backend"];
   private readonly stabilityTimeoutMs: number;
   private readonly factory: WebViewFactory;
@@ -116,6 +117,7 @@ export class WebViewRenderer implements Renderer {
       );
     }
     this.backend = options.chrome ? "chrome" : options.backend;
+    this.chromePath = options.chrome?.path;
     this.launchBackend = buildLaunchBackend(options.backend, options.chrome);
     this.stabilityTimeoutMs = options.stabilityTimeoutMs ?? DEFAULT_STABILITY_TIMEOUT_MS;
     this.factory = options.factory ?? createNativeWebView;
@@ -127,7 +129,8 @@ export class WebViewRenderer implements Renderer {
     const chrome =
       this.backend === "chrome" || (this.backend === undefined && process.platform !== "darwin");
     const available =
-      this.customFactory || (hasNativeWebView() && (!chrome || hasChromeExecutable()));
+      this.customFactory ||
+      (hasNativeWebView() && (!chrome || hasChromeExecutable(this.chromePath)));
     return {
       available,
       browser: available,
@@ -650,8 +653,28 @@ function hasNativeWebView(): boolean {
   return typeof (Bun as unknown as { WebView?: unknown }).WebView === "function";
 }
 
-function hasChromeExecutable(): boolean {
-  if (process.env.BUN_CHROME_PATH) return true;
+/**
+ * Chrome flags the environment adds to every launch. `BUNCRAWL_CHROME_NO_SANDBOX=1` adds
+ * `--no-sandbox` for containers whose seccomp profile denies the namespaces Chrome's sandbox needs.
+ */
+export function chromeLaunchArgs(env: Record<string, string | undefined> = process.env): string[] {
+  return ["1", "true"].includes(env.BUNCRAWL_CHROME_NO_SANDBOX?.toLowerCase() ?? "")
+    ? ["--no-sandbox"]
+    : [];
+}
+
+function hasChromeExecutable(path: string | undefined): boolean {
+  return path ? Bun.which(path) !== null : resolveChromeExecutable() !== null;
+}
+
+/**
+ * The Chrome executable Bun.WebView launches: `BUN_CHROME_PATH`, else the first Chrome-family
+ * browser on `PATH`, searched in Bun's order. Returns null when none is an executable.
+ */
+export function resolveChromeExecutable(
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  if (env.BUN_CHROME_PATH) return Bun.which(env.BUN_CHROME_PATH);
   const candidates =
     process.platform === "win32"
       ? ["chrome", "chromium", "brave", "msedge"]
@@ -664,7 +687,11 @@ function hasChromeExecutable(): boolean {
           "microsoft-edge",
           "chrome",
         ];
-  return candidates.some((candidate) => Bun.which(candidate) !== null);
+  for (const candidate of candidates) {
+    const path = Bun.which(candidate, env.PATH === undefined ? {} : { PATH: env.PATH });
+    if (path) return path;
+  }
+  return null;
 }
 
 function buildLaunchBackend(

@@ -175,6 +175,9 @@ importers:
       '@buncrawl/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
+      '@buncrawl/renderer':
+        specifier: workspace:*
+        version: link:../../packages/renderer
       '@buncrawl/scrape':
         specifier: workspace:*
         version: link:../../packages/scrape

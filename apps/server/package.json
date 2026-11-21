@@ -17,6 +17,7 @@
     "@buncrawl/crawl": "workspace:*",
     "@buncrawl/db": "workspace:*",
     "@buncrawl/jobs": "workspace:*",
+    "@buncrawl/renderer": "workspace:*",
     "@buncrawl/scrape": "workspace:*",
     "@buncrawl/security": "workspace:*",
     "@trpc/server": "catalog:",

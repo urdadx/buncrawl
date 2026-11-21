@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Smokebrand fixture</title>
+    <meta property="og:site_name" content="Smokebrand" />
+    <style>
+      body {
+        margin: 0;
+        background: #ffffff;
+        color: #1f2937;
+        font-family: "Liberation Sans", Arial, sans-serif;
+        font-size: 16px;
+        line-height: 24px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 32px;
+      }
+      h1 {
+        font-family: "Liberation Serif", Georgia, serif;
+        font-size: 48px;
+        line-height: 56px;
+        margin: 32px;
+      }
+      p {
+        margin: 16px 32px;
+      }
+      a {
+        color: #0e7490;
+      }
+      .cta {
+        background: #c2410c;
+        color: #ffffff;
+        border: 0;
+        border-radius: 8px;
+        padding: 12px 24px;
+        font-size: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <a class="logo" href="#">Smokebrand</a>
+      <button class="cta">Get started</button>
+    </header>
+    <main id="app">
+      <h1>Rendering smoke test</h1>
+      <p>
+        This page checks that the browser runs scripts, lays out text with installed fonts, captures
+        a screenshot and reports computed styles. It loads nothing from the network, so it renders
+        the same in CI, in the production image and offline.
+      </p>
+      <p>
+        Read the <a href="#docs">documentation</a> or the <a href="#changelog">changelog</a> for the
+        details of each check.
+      </p>
+    </main>
+    <script>
+      const marker = document.createElement("p");
+      marker.id = "js-marker";
+      marker.textContent = "Rendered by JavaScript";
+      document.getElementById("app").append(marker);
+    </script>
+  </body>
+</html>

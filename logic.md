@@ -4,11 +4,15 @@
 
 ```text
 buncrawl/
+├── .github/workflows/server-image.yml    # DONE: builds the image and runs the browser smoke tests
 ├── apps/
 │   ├── server/
+│   │   ├── Dockerfile                    # DONE: pinned Bun, Chrome for Testing, Lightpanda, fonts
+│   │   ├── scripts/smoke-image.sh        # DONE: offline smoke checks against a built image
 │   │   └── src/
 │   │       ├── index.ts                  # Bun.serve entry point
 │   │       └── routes/
+│   │           ├── capabilities.ts       # DONE: GET /v1/capabilities
 │   │           ├── v1/
 │   │           │   └── scrape.ts         # DONE: POST /v1/scrape handler
 │   │           └── v2/                   # DONE: Firecrawl v2 adapter over the v1 handlers
@@ -40,9 +44,13 @@ buncrawl/
 │   │       └── fetch.test.ts
 │   │
 │   ├── renderer/
+│   │   ├── test/
+│   │   │   ├── browser-smoke.test.ts     # Real-browser smoke tests (BUNCRAWL_RUN_BROWSER_SMOKE=1)
+│   │   │   └── fixtures/smoke.html       # Offline fixture page for the smoke tests
 │   │   └── src/
 │   │       ├── index.ts
 │   │       ├── renderer.ts               # Replaceable renderer interface
+│   │       ├── capabilities.ts           # Startup browser capability checks
 │   │       ├── browser-safety.ts          # CDP request and DNS enforcement
 │   │       ├── browser-safety.test.ts
 │   │       ├── detector.ts               # Decides when browser rendering is needed
@@ -268,13 +276,60 @@ Implement `apps/server/src/routes/v1/scrape.ts`:
 - DONE: Score cleaned and Readability candidates using text retention, semantic coverage, structure, and link density.
 - DONE: Protect card listings, multi-post forums, and reference-heavy articles from single-candidate content collapse.
 
-### 11. Linux Deployment
+### 11. Linux Deployment -> DONE
 
-- Pin the Bun version in Docker.
-- Install pinned Lightpanda and Chrome/Chromium builds and required fonts/libraries.
-- Set or verify `BUN_CHROME_PATH` and the Lightpanda executable path.
-- Add startup capability checks and `/v1/capabilities`.
-- Run real Lightpanda and WebView smoke tests in CI and the production image.
+- DONE: Pin the Bun version in Docker.
+- DONE: Install pinned Lightpanda and Chrome/Chromium builds and required fonts/libraries.
+- DONE: Set or verify `BUN_CHROME_PATH` and the Lightpanda executable path.
+- DONE: Add startup capability checks and `/v1/capabilities`.
+- DONE: Run real Lightpanda and WebView smoke tests in CI and the production image.
+
+Decisions:
+
+- `apps/server/Dockerfile` pins Bun (`oven/bun:1.4.2-slim`, Debian trixie), Chrome for Testing's
+  `chrome-headless-shell` 158.0.8127.36 and Lightpanda 1.0.5 as build arguments, and verifies both
+  downloads by SHA-256. Bump a version and its checksum together; CI runs the smoke tests against
+  the result.
+- Chrome for Testing has no arm64 Linux build, so the image is `linux/amd64` only and the build
+  fails early on other architectures.
+- `chrome-headless-shell` instead of full Chrome: it is the headless build Bun.WebView supports,
+  needs no GTK, and renders, screenshots, and exposes CDP like Chrome. Locally, full Chrome
+  155 captured 1280x713 viewport screenshots for a 1280x800 viewport; the image's shell captures
+  the full 1280x800.
+- Fonts: Liberation (metric-compatible with Arial, Times, Courier), DejaVu, Noto CJK, and Noto
+  Color Emoji, so screenshots and computed-style branding see real glyphs for common Western,
+  CJK, and emoji text. Noto CJK is the largest part of the image; it stays because scraped pages
+  are often CJK.
+- The build fails if `ldd` reports a missing library for either browser or if either cannot print
+  its version.
+- The image sets `BUN_CHROME_PATH=/opt/chrome/chrome-headless-shell` and
+  `BUNCRAWL_LIGHTPANDA_PATH=/opt/lightpanda/lightpanda`. Outside the image both are optional:
+  `BUNCRAWL_LIGHTPANDA_PATH` defaults to `lightpanda` on `PATH`, and Chrome is found the way Bun
+  finds it. A `BUN_CHROME_PATH` that is not an executable now makes WebView unavailable instead
+  of failing on the first render.
+- Docker's default seccomp profile denies the user namespaces Chrome's sandbox needs ("No usable
+  sandbox"), so the image sets `BUNCRAWL_CHROME_NO_SANDBOX=1`, which adds `--no-sandbox` to every
+  Chrome launch. The containment that remains is: the image's unprivileged `bun` user, one browser
+  per worker process, the CDP request guard, and the DNS-pinning safety proxy. Set it to `0` where
+  the container may create user namespaces.
+- At startup the server checks each renderer: its executable resolves, prints a version, and
+  loads a `data:` probe page with the same flags renders use. This catches missing libraries and
+  a missing sandbox before the first render. `GET /v1/capabilities` returns that report
+  (`renderers[]` with the executable, version, error, and the existing `RendererCapabilities`,
+  plus a `summary` aggregated like `RendererChain`). Unavailable renderers log a warning;
+  HTTP-only scraping still works.
+- Smoke tests (`packages/renderer/test/browser-smoke.test.ts`, run with
+  `BUNCRAWL_RUN_BROWSER_SMOKE=1`) render `test/fixtures/smoke.html` as a `data:` URL through the
+  isolated worker pool with the production worker configuration. They check that scripts run,
+  the screenshot decodes and contains drawn text, branding colors and fonts are measured, and
+  neither browser contacts a loopback service. The network guards block every private address,
+  so a local HTTP fixture server cannot be rendered, and `data:` URLs keep the tests offline.
+  Lightpanda's server mode now reports status 200 for `data:` documents, as `lightpanda fetch`
+  does.
+- `apps/server/scripts/smoke-image.sh <image>` runs the smoke tests inside the image, then starts
+  the server and requires `/v1/capabilities` to report both renderers with every feature.
+  `.github/workflows/server-image.yml` builds the image with the GitHub Actions cache and runs
+  that script on every push to `main` and every pull request.
 
 ### 12. Durable Jobs, Batch, Map, and Crawl
 

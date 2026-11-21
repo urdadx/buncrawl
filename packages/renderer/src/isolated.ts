@@ -1,9 +1,13 @@
 import { errorCodeOf } from "@buncrawl/core";
 
 import { RendererChain } from "./chain";
-import { LightpandaRenderer, type LightpandaRendererOptions } from "./lightpanda";
+import {
+  LightpandaRenderer,
+  resolveLightpandaExecutable,
+  type LightpandaRendererOptions,
+} from "./lightpanda";
 import type { RenderRequest, Renderer, RendererCapabilities, RenderResult } from "./renderer";
-import { WebViewRenderer, type WebViewRendererOptions } from "./webview";
+import { chromeLaunchArgs, WebViewRenderer, type WebViewRendererOptions } from "./webview";
 
 const DEFAULT_MAX_WORKERS = 2;
 const DEFAULT_MAX_QUEUE = 32;
@@ -228,41 +232,45 @@ export class IsolatedRenderer implements Renderer {
   }
 }
 
+/** Worker configurations for the installed browsers, as `createIsolatedDefaultRenderer` uses them. */
+export function isolatedRendererConfigs(env: Record<string, string | undefined> = process.env): {
+  lightpanda?: IsolatedRendererConfig;
+  webview: IsolatedRendererConfig;
+} {
+  const proxyUrl = env.BUNCRAWL_PROXY_URL;
+  const executable = resolveLightpandaExecutable(env);
+  const argv = chromeLaunchArgs(env);
+  const chrome = {
+    ...(proxyUrl ? { proxyUrl } : {}),
+    ...(argv.length > 0 ? { argv } : {}),
+  };
+  return {
+    ...(executable
+      ? {
+          lightpanda: {
+            type: "lightpanda",
+            options: { executable, ...(proxyUrl ? { proxyUrl } : {}) },
+          },
+        }
+      : {}),
+    webview: {
+      type: "webview",
+      options: { backend: "chrome", ...(Object.keys(chrome).length > 0 ? { chrome } : {}) },
+    },
+  };
+}
+
 export function createIsolatedDefaultRenderer(options: IsolatedRendererOptions = {}): Renderer {
-  const proxyUrl = process.env.BUNCRAWL_PROXY_URL;
-  const lightpanda = new LightpandaRenderer(proxyUrl ? { proxyUrl } : {});
+  const configs = isolatedRendererConfigs();
   const renderers: Renderer[] = [];
-  if (lightpanda.capabilities().available) {
-    renderers.push(
-      new IsolatedRenderer(
-        { type: "lightpanda", ...(proxyUrl ? { options: { proxyUrl } } : {}) },
-        lightpanda.capabilities(),
-        options,
-      ),
-    );
+  if (configs.lightpanda?.type === "lightpanda") {
+    const lightpanda = new LightpandaRenderer({ ...configs.lightpanda.options, server: false });
+    renderers.push(new IsolatedRenderer(configs.lightpanda, lightpanda.capabilities(), options));
   }
 
-  const chrome = proxyUrl ? { proxyUrl } : undefined;
   const safeWebview = new WebViewRenderer({ backend: "chrome" });
-  if (safeWebview.capabilities().available) {
-    renderers.push(
-      new IsolatedRenderer(
-        {
-          type: "webview",
-          options: { backend: "chrome", ...(chrome ? { chrome } : {}) },
-        },
-        safeWebview.capabilities(),
-        options,
-      ),
-    );
-  }
-
-  if (renderers.length === 0) {
-    return new IsolatedRenderer(
-      { type: "webview", options: { backend: "chrome", ...(chrome ? { chrome } : {}) } },
-      safeWebview.capabilities(),
-      options,
-    );
+  if (safeWebview.capabilities().available || renderers.length === 0) {
+    renderers.push(new IsolatedRenderer(configs.webview, safeWebview.capabilities(), options));
   }
   return renderers.length === 1 ? renderers[0]! : new RendererChain(renderers);
 }
