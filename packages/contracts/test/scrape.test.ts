@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import * as v from "valibot";
 
-import { scrapeRequestSchema } from "../src/scrape";
+import { isBrowserOnlyFormat, scrapeDocumentSchema, scrapeRequestSchema } from "../src/scrape";
 
 describe("scrapeRequestSchema", () => {
   test("accepts a valid request", () => {
@@ -50,5 +50,37 @@ describe("scrapeRequestSchema", () => {
     expect(result.success).toBe(false);
     if (result.success) return;
     expect(result.issues.map((issue) => issue.message)).toContain(message);
+  });
+});
+
+describe("branding format", () => {
+  test("accepts branding alongside every other format", () => {
+    const formats = ["markdown", "html", "rawHtml", "links", "screenshots", "branding"];
+    expect(v.safeParse(scrapeRequestSchema, { url: "https://acme.test", formats }).success).toBe(
+      true,
+    );
+    expect(isBrowserOnlyFormat("branding")).toBe(true);
+    expect(isBrowserOnlyFormat("markdown")).toBe(false);
+  });
+
+  test("validates a branding profile on the scrape document", () => {
+    const metadata = {
+      sourceURL: "https://acme.test",
+      finalURL: "https://acme.test/",
+      statusCode: 200,
+      renderer: "webview",
+    };
+    const branding = {
+      colorScheme: "dark",
+      brandName: "Acme",
+      logo: null,
+      colors: { primary: "#533AFD", background: "#08090A" },
+      components: { buttonPrimary: { background: "#533AFD", borderRadius: "9999px" } },
+      images: { logo: null, favicon: "https://acme.test/favicon.ico" },
+    };
+    expect(v.safeParse(scrapeDocumentSchema, { metadata, branding }).success).toBe(true);
+    expect(
+      v.safeParse(scrapeDocumentSchema, { metadata, branding: { colorScheme: "sepia" } }).success,
+    ).toBe(false);
   });
 });

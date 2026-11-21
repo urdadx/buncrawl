@@ -131,6 +131,7 @@ Detector classifies returned HTML
 - A Lightpanda runtime failure triggers a Chromium attempt when WebView is available.
 - Lightpanda output that fails quality checks escalates to Chromium within the same deadline.
 - In `renderJs: "auto"` mode, where a render must beat the fetched page, Lightpanda and Chromium start together when a Chromium worker is idle and the first accepted result wins; forced renders and screenshots stay sequential. Losing renders are left to finish within the deadline rather than killing their warm worker.
+- The `branding` format measures a page's visual identity in Chromium: color scheme, brand name, logo, favicon and og:image, primary/secondary/accent and text colors, fonts and type scale, base spacing unit and corner radius, and primary/secondary button and input styles. An in-page script only samples computed styles; deterministic heuristics (no LLM) pick the values, and colors are hex, including ones the page declares in oklch. It needs a browser, so `renderJs: false` rejects it and Lightpanda, which does not compute styles, is never used for it. Field names follow Firecrawl's branding format. If styles cannot be read, the page still returns with the warning `Branding could not be measured`.
 - Lightpanda runs as a subprocess and inherits the request deadline and cancellation signal.
 - Browser rendering runs in dedicated Bun worker subprocesses with one active view per worker.
 - The worker pool bounds concurrency and queued requests, and recycles workers by page count or RSS.

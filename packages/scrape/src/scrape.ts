@@ -1,5 +1,6 @@
 import {
   DEFAULT_SCRAPE_TIMEOUT_MS,
+  isBrowserOnlyFormat,
   isScreenshotFormat,
   type ScrapeDocument,
   type ScrapeFormat,
@@ -130,18 +131,24 @@ async function scrapeWithTimings(
   const deadline = new Deadline(request.timeout ?? DEFAULT_SCRAPE_TIMEOUT_MS, context.signal);
   const formats = request.formats ?? DEFAULT_FORMATS;
   const renderMode = request.renderJs ?? "auto";
-  const screenshotRequested = formats.some(isScreenshotFormat);
-  const screenshotOnly = screenshotRequested && formats.every(isScreenshotFormat);
+  const browserFormatRequested = formats.some(isBrowserOnlyFormat);
+  const browserFormatsOnly = browserFormatRequested && formats.every(isBrowserOnlyFormat);
+  const brandingRequested = hasFormat(formats, "branding");
   const renderer = dependencies.renderer ?? createDefaultRenderer();
   const performFetch = dependencies.fetch ?? fetchPage;
 
-  if (renderMode === false && screenshotRequested) {
-    return failure("INVALID_REQUEST", "screenshots require JavaScript rendering");
+  if (renderMode === false && browserFormatRequested) {
+    return failure(
+      "INVALID_REQUEST",
+      formats.some(isScreenshotFormat)
+        ? "screenshots require JavaScript rendering"
+        : "branding requires JavaScript rendering",
+    );
   }
 
   try {
     const forcedRenderUrl =
-      renderMode === true || screenshotOnly
+      renderMode === true || browserFormatsOnly
         ? await timed("fetchMs", () =>
             validateResolvedUrl(request.url, {
               resolver: context.resolver,
@@ -150,7 +157,7 @@ async function scrapeWithTimings(
           )
         : undefined;
     let fetched: FetchPageResult | undefined;
-    if (renderMode !== true && !screenshotOnly) {
+    if (renderMode !== true && !browserFormatsOnly) {
       fetched = await timed("fetchMs", () =>
         performFetch(request.url, {
           deadline,
@@ -169,7 +176,7 @@ async function scrapeWithTimings(
           }),
         )
       : undefined;
-    const browserRequired = renderMode === true || screenshotRequested;
+    const browserRequired = renderMode === true || browserFormatRequested;
     const shouldRender = browserRequired || (renderMode === "auto" && fetchedDecision?.render);
 
     const { rendered, warning, unavailable } = shouldRender
@@ -215,7 +222,15 @@ async function scrapeWithTimings(
       rawHtml,
     );
 
-    return { success: true, data: document, ...(warning ? { warning } : {}) };
+    const warnings = [
+      warning,
+      brandingRequested && !document.branding ? "Branding could not be measured" : undefined,
+    ].filter(Boolean);
+    return {
+      success: true,
+      data: document,
+      ...(warnings.length ? { warning: warnings.join("; ") } : {}),
+    };
   } catch (error) {
     return failure(errorCode(error, deadline, context.signal), errorMessage(error));
   }
@@ -249,9 +264,12 @@ async function renderPage(input: {
     return { warning: "Browser rendering was unavailable; returned fetched content" };
   }
   const renderRequest = buildRenderRequest(request, input.url, input.deadline);
+  // A browser-only format is only useful from a renderer that actually produced it.
   const accept = (candidate: RenderResult) =>
-    renderRequest.screenshot
-      ? candidate.screenshot !== undefined && candidate.html.trim().length > 0
+    renderRequest.screenshot || renderRequest.branding
+      ? candidate.html.trim().length > 0 &&
+        (!renderRequest.screenshot || candidate.screenshot !== undefined) &&
+        (!renderRequest.branding || candidate.branding !== undefined)
       : isRenderedContentBetter(candidate, fetched, fetchedDecision);
   try {
     const candidate = await input.timed("renderMs", () =>
@@ -290,6 +308,7 @@ function buildRenderRequest(
     deadline,
     ...(request.waitForMs === undefined ? {} : { waitForMs: request.waitForMs }),
     ...(screenshotFormat ? { screenshot: { fullPage: options?.fullPage ?? false } } : {}),
+    ...(hasFormat(request.formats ?? DEFAULT_FORMATS, "branding") ? { branding: true } : {}),
     ...(options?.viewport ? { viewport: options.viewport } : {}),
   };
 }
@@ -346,6 +365,7 @@ function buildDocument(
   if (formats.some(isScreenshotFormat) && rendered?.screenshot) {
     document.screenshot = screenshotDataUrl(rendered.screenshot);
   }
+  if (hasFormat(formats, "branding") && rendered?.branding) document.branding = rendered.branding;
   return document;
 }
 

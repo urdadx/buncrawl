@@ -1,5 +1,6 @@
 import { errorCodeOf } from "@buncrawl/core";
 
+import { BRANDING_SCRIPT, buildBrandingProfile } from "./branding";
 import {
   installBrowserNetworkGuard,
   type BrowserNetworkGuard,
@@ -133,6 +134,7 @@ export class WebViewRenderer implements Renderer {
       javascript: available,
       screenshots: available,
       cdp: available && chrome,
+      computedStyles: available,
     };
   }
 
@@ -151,7 +153,7 @@ export class WebViewRenderer implements Renderer {
       await this.navigate(view, request, session, timings);
       const guard = session.guard!;
       await this.settle(view, request, guard, timings);
-      const { html, screenshot } = await this.capture(view, request, guard, timings);
+      const { html, screenshot, branding } = await this.capture(view, request, guard, timings);
 
       timings.totalMs = performance.now() - startedAt;
       timings.blockedSubrequests = guard.blockedSubrequests();
@@ -164,6 +166,7 @@ export class WebViewRenderer implements Renderer {
         renderer: this.name,
         elapsedMs: performance.now() - startedAt,
         ...(screenshot ? { screenshot } : {}),
+        ...(branding ? { branding } : {}),
       };
     } finally {
       session.guard?.close();
@@ -275,7 +278,7 @@ export class WebViewRenderer implements Renderer {
     request: RenderRequest,
     guard: BrowserNetworkGuard,
     timings: Record<string, number>,
-  ): Promise<{ html: string; screenshot?: RenderResult["screenshot"] }> {
+  ): Promise<Pick<RenderResult, "html" | "screenshot" | "branding">> {
     const fullPage = typeof request.screenshot === "object" && request.screenshot.fullPage;
     if (fullPage) {
       const lazyLoadStartedAt = performance.now();
@@ -308,7 +311,8 @@ export class WebViewRenderer implements Renderer {
       );
     }
     timings.htmlMs = performance.now() - htmlStartedAt;
-    if (!request.screenshot) return { html };
+    const branding = request.branding ? await measureBranding(view, timings) : undefined;
+    if (!request.screenshot) return { html, ...(branding ? { branding } : {}) };
 
     const screenshotStartedAt = performance.now();
     const data = fullPage
@@ -321,7 +325,27 @@ export class WebViewRenderer implements Renderer {
       );
     }
     timings.screenshotMs = performance.now() - screenshotStartedAt;
-    return { html, screenshot: { data, mimeType: "image/png" } };
+    return {
+      html,
+      screenshot: { data, mimeType: "image/png" },
+      ...(branding ? { branding } : {}),
+    };
+  }
+}
+
+/** Branding is best effort: a page whose styles cannot be read still renders, without a profile. */
+async function measureBranding(
+  view: WebViewLike,
+  timings: Record<string, number>,
+): Promise<RenderResult["branding"]> {
+  const startedAt = performance.now();
+  try {
+    return buildBrandingProfile(await view.evaluate(BRANDING_SCRIPT));
+  } catch (error) {
+    console.warn("Branding measurement failed", error);
+    return undefined;
+  } finally {
+    timings.brandingMs = performance.now() - startedAt;
   }
 }
 

@@ -498,6 +498,9 @@ importers:
 
   packages/renderer:
     dependencies:
+      '@buncrawl/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@buncrawl/core':
         specifier: workspace:*
         version: link:../core

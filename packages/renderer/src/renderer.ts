@@ -1,3 +1,4 @@
+import type { BrandingProfile } from "@buncrawl/contracts";
 import type { Deadline } from "@buncrawl/core";
 
 export interface RenderRequest {
@@ -5,6 +6,8 @@ export interface RenderRequest {
   deadline: Deadline;
   waitForMs?: number;
   screenshot?: boolean | ScreenshotOptions;
+  /** Measure the page's branding from computed styles; needs a renderer that can run scripts. */
+  branding?: boolean;
   viewport?: {
     width: number;
     height: number;
@@ -26,6 +29,7 @@ export interface RenderResult {
     data: string;
     mimeType: "image/png";
   };
+  branding?: BrandingProfile;
 }
 
 export interface RendererCapabilities {
@@ -34,6 +38,8 @@ export interface RendererCapabilities {
   javascript: boolean;
   screenshots: boolean;
   cdp: boolean;
+  /** Can read computed page styles, which branding needs; Lightpanda cannot. */
+  computedStyles?: boolean;
 }
 
 export interface Renderer {

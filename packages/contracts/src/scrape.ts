@@ -28,7 +28,7 @@ export const screenshotFormatSchema = v.strictObject({
 });
 
 export const scrapeFormatSchema = v.union([
-  v.picklist(["markdown", "html", "rawHtml", "links", "screenshots"]),
+  v.picklist(["markdown", "html", "rawHtml", "links", "screenshots", "branding"]),
   screenshotFormatSchema,
 ]);
 
@@ -43,7 +43,7 @@ export const scrapeRequestSchema = v.strictObject({
     v.pipe(
       v.array(scrapeFormatSchema),
       v.minLength(1, "At least one format is required"),
-      v.maxLength(5, "Too many formats"),
+      v.maxLength(6, "Too many formats"),
       v.check(
         (formats) => new Set(formats.map(formatKey)).size === formats.length,
         "Formats must be unique",
@@ -94,12 +94,103 @@ export function isScreenshotFormat(format: ScrapeFormat): boolean {
   return format === "screenshots" || typeof format === "object";
 }
 
+/** Formats that can only be produced by a real browser, never from fetched HTML. */
+export function isBrowserOnlyFormat(format: ScrapeFormat): boolean {
+  return isScreenshotFormat(format) || format === "branding";
+}
+
+const brandingColorsSchema = v.strictObject({
+  primary: v.optional(v.string()),
+  secondary: v.optional(v.string()),
+  accent: v.optional(v.string()),
+  background: v.optional(v.string()),
+  textPrimary: v.optional(v.string()),
+  textSecondary: v.optional(v.string()),
+  link: v.optional(v.string()),
+});
+
+const brandingComponentSchema = v.strictObject({
+  background: v.optional(v.string()),
+  textColor: v.optional(v.string()),
+  borderColor: v.optional(v.string()),
+  borderRadius: v.optional(v.string()),
+  shadow: v.optional(v.string()),
+});
+
+const optionalUrl = v.optional(v.nullable(v.string()));
+
+/**
+ * A page's visual identity, measured from computed styles in the browser. Field names follow
+ * Firecrawl's branding format; values are deterministic (no LLM), and colors are hex strings.
+ */
+export const brandingProfileSchema = v.strictObject({
+  colorScheme: v.optional(v.picklist(["light", "dark"])),
+  brandName: v.optional(v.string()),
+  logo: optionalUrl,
+  colors: v.optional(brandingColorsSchema),
+  fonts: v.optional(v.array(v.strictObject({ family: v.string() }))),
+  typography: v.optional(
+    v.strictObject({
+      fontFamilies: v.optional(
+        v.strictObject({
+          primary: v.optional(v.string()),
+          heading: v.optional(v.string()),
+          code: v.optional(v.string()),
+        }),
+      ),
+      fontStacks: v.optional(
+        v.strictObject({
+          primary: v.optional(v.array(v.string())),
+          heading: v.optional(v.array(v.string())),
+          code: v.optional(v.array(v.string())),
+        }),
+      ),
+      fontSizes: v.optional(
+        v.strictObject({
+          h1: v.optional(v.string()),
+          h2: v.optional(v.string()),
+          h3: v.optional(v.string()),
+          body: v.optional(v.string()),
+        }),
+      ),
+      lineHeights: v.optional(
+        v.strictObject({ heading: v.optional(v.number()), body: v.optional(v.number()) }),
+      ),
+      fontWeights: v.optional(
+        v.strictObject({ regular: v.optional(v.number()), bold: v.optional(v.number()) }),
+      ),
+    }),
+  ),
+  spacing: v.optional(
+    v.strictObject({ baseUnit: v.optional(v.number()), borderRadius: v.optional(v.string()) }),
+  ),
+  components: v.optional(
+    v.strictObject({
+      buttonPrimary: v.optional(brandingComponentSchema),
+      buttonSecondary: v.optional(brandingComponentSchema),
+      input: v.optional(brandingComponentSchema),
+    }),
+  ),
+  images: v.optional(
+    v.strictObject({
+      logo: optionalUrl,
+      logoHref: optionalUrl,
+      logoAlt: optionalUrl,
+      favicon: optionalUrl,
+      ogImage: optionalUrl,
+    }),
+  ),
+});
+
+export type BrandingProfile = v.InferOutput<typeof brandingProfileSchema>;
+
 export const scrapeDocumentSchema = v.strictObject({
   markdown: v.optional(v.string()),
   html: v.optional(v.string()),
   rawHtml: v.optional(v.string()),
   links: v.optional(v.array(v.string())),
   screenshot: v.optional(v.string()),
+  branding: v.optional(brandingProfileSchema),
   metadata: v.strictObject({
     sourceURL: v.string(),
     finalURL: v.string(),

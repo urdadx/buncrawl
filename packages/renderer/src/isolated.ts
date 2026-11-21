@@ -25,6 +25,7 @@ export interface WorkerRenderRequest {
   timeoutMs: number;
   waitForMs?: number;
   screenshot?: RenderRequest["screenshot"];
+  branding?: boolean;
   viewport?: RenderRequest["viewport"];
 }
 
@@ -190,6 +191,7 @@ export class IsolatedRenderer implements Renderer {
           timeoutMs: Math.max(1, Math.floor(job.request.deadline.remainingMs)),
           ...(job.request.waitForMs === undefined ? {} : { waitForMs: job.request.waitForMs }),
           ...(job.request.screenshot === undefined ? {} : { screenshot: job.request.screenshot }),
+          ...(job.request.branding ? { branding: true } : {}),
           ...(job.request.viewport === undefined ? {} : { viewport: job.request.viewport }),
         },
         job.request.deadline.signal,

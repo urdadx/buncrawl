@@ -59,6 +59,7 @@ process.on("message", async (message: unknown) => {
       deadline: new Deadline(request.timeoutMs),
       ...(request.waitForMs === undefined ? {} : { waitForMs: request.waitForMs }),
       ...(request.screenshot === undefined ? {} : { screenshot: request.screenshot }),
+      ...(request.branding ? { branding: true } : {}),
       ...(request.viewport === undefined ? {} : { viewport: request.viewport }),
     });
     process.send?.({ id: message.id, result, rssBytes: process.memoryUsage().rss });

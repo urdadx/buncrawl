@@ -36,6 +36,9 @@ export class RendererChain implements FallbackRenderer {
       javascript: available.some((renderer) => renderer.capabilities().javascript),
       screenshots: available.some((renderer) => renderer.capabilities().screenshots),
       cdp: available.some((renderer) => renderer.capabilities().cdp),
+      computedStyles: available.some(
+        (renderer) => renderer.capabilities().computedStyles !== false,
+      ),
     };
   }
 
@@ -130,11 +133,16 @@ export class RendererChain implements FallbackRenderer {
   }
 
   private orderedRenderers(request: RenderRequest): Renderer[] {
-    const available = this.renderers.filter((renderer) => renderer.capabilities().available);
-    if (!request.screenshot) return available;
+    const available = this.renderers.filter(
+      (renderer) =>
+        renderer.capabilities().available &&
+        // Trying a renderer that cannot measure branding would only replace the real error.
+        (!request.branding || renderer.capabilities().computedStyles !== false),
+    );
+    if (!request.screenshot && !request.branding) return available;
 
-    // Lightpanda's CLI requires separate navigations for HTML and PNG. Prefer
-    // WebView, which captures both from one loaded page, when it is available.
+    // Lightpanda's CLI requires separate navigations for HTML and PNG, and it cannot compute the
+    // styles branding needs. Prefer WebView, which does both from one loaded page.
     return available.sort((left, right) => screenshotPriority(left) - screenshotPriority(right));
   }
 }

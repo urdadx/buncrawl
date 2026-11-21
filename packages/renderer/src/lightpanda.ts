@@ -89,6 +89,7 @@ export class LightpandaRenderer implements Renderer {
       javascript: available,
       screenshots: available,
       cdp: false,
+      computedStyles: false,
     };
   }
 
@@ -100,6 +101,12 @@ export class LightpandaRenderer implements Renderer {
       );
     }
     request.deadline.throwIfStopped();
+    if (request.branding) {
+      throw new LightpandaRendererError(
+        "LIGHTPANDA_RENDER_FAILED",
+        "Lightpanda cannot measure branding: it does not compute page styles",
+      );
+    }
     if (
       request.screenshot &&
       (request.viewport ||
