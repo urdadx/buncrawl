@@ -9,8 +9,9 @@ buncrawl/
 │   │   └── src/
 │   │       ├── index.ts                  # Bun.serve entry point
 │   │       └── routes/
-│   │           └── v1/
-│   │               └── scrape.ts         # DONE: POST /v1/scrape handler
+│   │           ├── v1/
+│   │           │   └── scrape.ts         # DONE: POST /v1/scrape handler
+│   │           └── v2/                   # DONE: Firecrawl v2 adapter over the v1 handlers
 │   ├── web/                              # Dashboard
 │   └── fumadocs/                         # Documentation site
 │
@@ -386,12 +387,94 @@ Delivery retries at most five times with exponential backoff and records status/
 webhook deliveries. Terminal job events are retained seven days, delivery records fourteen
 days; pending deliveries keep their events until resolved.
 
-#### 12.9 Firecrawl v2 Compatibility
+#### 12.9 Firecrawl v2 Compatibility -> DONE
 
 - Implement a thin adapter over canonical Buncrawl services and contracts.
 - Translate scrape, batch, map, crawl, status, cancellation, errors, webhook events, and defaults explicitly.
 - Do not change core job or document types merely to mimic Firecrawl field names.
 - Document unsupported options and cover supported behavior with compatibility tests.
+
+`apps/server/src/routes/v2/translate.ts` translates requests and responses; the v2 handlers pass
+each translated request to the canonical v1 handler and translate its response back, so
+validation, queueing, storage, and limits stay canonical.
+
+| Firecrawl v2                             | Canonical                                               |
+| ---------------------------------------- | ------------------------------------------------------- |
+| `POST /v2/scrape`                        | `POST /v1/scrape`                                       |
+| `POST /v2/batch/scrape`                  | `POST /v1/batch/scrape` (`urls` -> `requests`)          |
+| `GET`/`DELETE /v2/batch/scrape/:id`      | `GET`/`DELETE /v1/batch/scrape/:id`                     |
+| `GET /v2/batch/scrape/:id/errors`        | failed items across every result page                   |
+| `POST /v2/crawl`                         | `POST /v1/crawl`                                        |
+| `GET`/`DELETE /v2/crawl/:id`             | `GET`/`DELETE /v1/crawl/:id`                            |
+| `GET /v2/crawl/:id/errors`               | failed pages; `ROBOTS_BLOCKED` ones go to `robotsBlocked` |
+| `POST /v2/map` (synchronous)             | a `/v1/map` job, awaited, then all its URLs as `links`  |
+
+- Formats: `markdown`, `html`, `rawHtml`, `links` and `branding` (string or `{ type }`) map
+  one to one; `screenshot` maps to the canonical screenshot object with `fullPage` and
+  `viewport`. Branding's `mode` is accepted and ignored, as Firecrawl does.
+- Options: `waitFor` -> `waitForMs`; `timeout`, `onlyMainContent`, `maxAge`, `storeInCache` pass
+  through. Crawl `limit` -> `maxPages`, `allowSubdomains` -> `includeSubdomains`,
+  `crawlEntireDomain` -> `pathPrefix: !crawlEntireDomain`, `scrapeOptions` translated as above.
+  Map `limit` -> `maxUrls`, `includeSubdomains` (or `allowSubdomains`) passes through, `timeout`
+  -> `timeoutMs`.
+- Firecrawl defaults are applied explicitly: formats `["markdown"]`, `onlyMainContent: true`,
+  crawl `limit` 10000, map `limit` 5000, map `includeSubdomains: true`.
+- Documents: `metadata.finalURL` -> `metadata.url`, `proxyUsed: "basic"`, `renderer` is dropped,
+  and a scrape warning is set on both the response and `data.warning`. Branding passes through
+  unchanged because the canonical profile already uses Firecrawl's field names.
+- Status: `queued`, `running`, and `cancelling` -> `scraping`; `completed`, `failed`,
+  `cancelled` are unchanged. `completed`/`creditsUsed` are the succeeded count, `total` the
+  progress total, `completedAt` the finish time. `expiresAt` is omitted because Buncrawl does not
+  expire job results. `skip`/`limit` map to `cursor`/`limit` (pages hold at most 100), and `next`
+  is a `/v2` URL with `skip`.
+- Cancellation returns `{ success: true, status: "cancelled" }`, or 409 when the job has already
+  completed or failed.
+- Errors use `{ success: false, code, error, details? }`. `DEADLINE_EXCEEDED` ->
+  `SCRAPE_TIMEOUT` (408), `DNS_RESOLUTION_FAILED` -> `SCRAPE_DNS_RESOLUTION_ERROR`,
+  `REQUEST_CANCELLED` -> `SCRAPE_JOB_CANCELLED`; other canonical codes and statuses pass through.
+  Malformed input (unknown keys or formats, wrong types) returns 400 `BAD_REQUEST`; valid
+  Firecrawl options Buncrawl lacks return 400 `UNSUPPORTED_OPTION` listing every one in
+  `details`. Other `/v2/*` paths return 404 `UNSUPPORTED_ENDPOINT`.
+- Webhooks: a URL string or `{ url, events }`. Firecrawl signs with a team secret rather than a
+  per-request one, so the server-wide `BUNCRAWL_WEBHOOK_SECRET` (16+ characters) is used;
+  without it a webhook is rejected as unsupported. Events map `started`/`completed` ->
+  `state_changed`, `failed` -> `state_changed` + `error`, `page` -> `item_completed` (batch) or
+  `page_completed` (crawl). Because `started` and `completed` share `state_changed`, selecting
+  either delivers every state change. Deliveries keep Buncrawl's payload and `X-Buncrawl-*`
+  signature headers (see 12.8), not Firecrawl's `crawl.page` payloads or
+  `X-Firecrawl-Signature`.
+- Map waits for its job up to its `timeout` (default 120 s) plus 10 s; past that, or when the
+  client disconnects, the job is cancelled and the links found so far are returned with a
+  warning. A failed map with no links returns 500.
+
+Unsupported Firecrawl options (rejected with `UNSUPPORTED_OPTION` unless absent, empty, or the
+listed default):
+
+- Formats: `json`, `deterministicJson`, `summary`, `changeTracking`, `images`, `rawBase64`,
+  `attributes`, `question`, `highlights`, `query`, `product`, `menu`, `audio`, `video`; screenshot
+  `quality`; branding `__experimental_screenshot`.
+- Scrape options: `actions`, `headers`, `includeTags`, `excludeTags`, `parsers`, `location`,
+  `minAge`, `useMock`, `profile`, `threatProtection`, `auditMetadata`, `redactPII` (false),
+  `safeMode` (false), `mobile` (false), `onlyCleanContent` (false), `skipTlsVerification`
+  (false), `lockdown` (false), `checkPromptInjection` (false), `fastMode` (false), `proxy`
+  (`auto` or `basic`), `zeroDataRetention` (false), `domainTools` (false), `toolDetail`, and any
+  `__`-prefixed option (false).
+- Batch scrape: `appendToId`.
+- Crawl and map: `includePaths`, `excludePaths`, `maxDiscoveryDepth` (Buncrawl's `maxDepth`
+  counts path segments, not link hops), `allowExternalLinks` (false), `ignoreRobotsTxt` (false),
+  `robotsUserAgent`, `sitemap` (`include`), `delay`. Crawl also rejects `prompt`; map also rejects
+  `search`, `location`, `headers`, `threatProtection`, `auditMetadata`, and `useMock`.
+- Webhooks: `headers`, `metadata`, and any webhook when `BUNCRAWL_WEBHOOK_SECRET` is unset.
+
+Accepted and ignored: `origin`, `integration`, `blockAds`, `removeBase64Images`, branding `mode`,
+`maxConcurrency`, `deduplicateSimilarURLs`, `ignoreQueryParameters` (Buncrawl keeps query
+strings), `regexOnFullURL`, and map `crawlEntireDomain`, `filterByPath`, `useIndex`,
+`ignoreCache`.
+
+Unsupported endpoints include `GET /v2/scrape/:id`, `/v2/search`, `/v2/extract`, `/v2/agent`,
+`/v2/parse`, `/v2/crawl/ongoing`, `/v2/crawl/active`, `/v2/crawl/params-preview`, browser,
+monitor and team endpoints, and Firecrawl's WebSocket crawl status; use the canonical
+`/v1/.../events` SSE streams for live progress.
 
 #### 12.10 SDKs and MCP
 
