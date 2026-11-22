@@ -19,7 +19,9 @@ import {
   detectRenderNeed,
   createIsolatedDefaultRenderer,
   isFallbackRenderer,
+  rendererCapabilityReport,
   type Renderer,
+  type RendererCapabilityReport,
   type RenderRequest,
   type RenderResult,
 } from "@buncrawl/renderer";
@@ -28,7 +30,9 @@ import { type DnsResolver, validateResolvedUrl } from "@buncrawl/security";
 import { scrapeCacheKey, type ScrapeCache } from "./cache";
 
 const DEFAULT_FORMATS: ScrapeFormat[] = ["markdown"];
-let defaultRenderer: Renderer | undefined;
+let defaultRenderer:
+  | { report: Promise<RendererCapabilityReport>; renderer: Promise<Renderer> }
+  | undefined;
 
 type FetchPage = typeof fetchPage;
 
@@ -134,7 +138,6 @@ async function scrapeWithTimings(
   const browserFormatRequested = formats.some(isBrowserOnlyFormat);
   const browserFormatsOnly = browserFormatRequested && formats.every(isBrowserOnlyFormat);
   const brandingRequested = hasFormat(formats, "branding");
-  const renderer = dependencies.renderer ?? createDefaultRenderer();
   const performFetch = dependencies.fetch ?? fetchPage;
 
   if (renderMode === false && browserFormatRequested) {
@@ -182,7 +185,10 @@ async function scrapeWithTimings(
     const { rendered, warning, unavailable } = shouldRender
       ? await renderPage({
           request,
-          renderer,
+          renderer: () =>
+            dependencies.renderer
+              ? Promise.resolve(dependencies.renderer)
+              : untilStopped(createDefaultRenderer(), deadline),
           url: fetched?.finalUrl ?? forcedRenderUrl?.href ?? request.url,
           deadline,
           fetched,
@@ -249,7 +255,7 @@ interface RenderOutcome {
  */
 async function renderPage(input: {
   request: ScrapeRequest;
-  renderer: Renderer;
+  renderer: () => Promise<Renderer>;
   url: string;
   deadline: Deadline;
   fetched: FetchPageResult | undefined;
@@ -258,7 +264,8 @@ async function renderPage(input: {
   timed: Timed;
   timings: Omit<ScrapeTimings, "totalMs">;
 }): Promise<RenderOutcome> {
-  const { request, renderer, fetched, fetchedDecision, browserRequired } = input;
+  const { request, fetched, fetchedDecision, browserRequired } = input;
+  const renderer = await input.timed("renderMs", input.renderer);
   if (!renderer.capabilities().available) {
     if (browserRequired || !fetched) return { unavailable: true };
     return { warning: "Browser rendering was unavailable; returned fetched content" };
@@ -313,9 +320,36 @@ function buildRenderRequest(
   };
 }
 
-function createDefaultRenderer(): Renderer {
-  defaultRenderer ??= createIsolatedDefaultRenderer();
-  return defaultRenderer;
+/**
+ * The shared browser renderer, limited to the renderers the process's capability report found
+ * working. A newly set report replaces it, so a renderer that failed its check is never used.
+ */
+function createDefaultRenderer(): Promise<Renderer> {
+  const report = rendererCapabilityReport();
+  if (defaultRenderer?.report !== report) {
+    const previous = defaultRenderer?.renderer;
+    defaultRenderer = {
+      report,
+      renderer: report.then((checked) => createIsolatedDefaultRenderer({ report: checked })),
+    };
+    void previous?.then(closeRenderer);
+  }
+  return defaultRenderer.renderer;
+}
+
+function closeRenderer(renderer: Renderer): void {
+  if ("close" in renderer && typeof renderer.close === "function") renderer.close();
+}
+
+/** Waits for `work`, or rejects once the deadline expires or the scrape is cancelled. */
+function untilStopped<T>(work: Promise<T>, deadline: Deadline): Promise<T> {
+  const stopped = deadline.stopReason();
+  if (stopped !== undefined) return Promise.reject(stopped);
+  return new Promise((resolve, reject) => {
+    const stop = () => reject(deadline.stopReason());
+    deadline.signal.addEventListener("abort", stop, { once: true });
+    work.then(resolve, reject).finally(() => deadline.signal.removeEventListener("abort", stop));
+  });
 }
 
 function isRenderedContentBetter(

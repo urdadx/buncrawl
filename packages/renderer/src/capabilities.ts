@@ -86,6 +86,24 @@ export async function checkRendererCapabilities(
   };
 }
 
+let sharedReport: Promise<RendererCapabilityReport> | undefined;
+
+/**
+ * The report this process selects scrape renderers from. The first call runs the check, unless a
+ * report was set with `setRendererCapabilityReport`, as the server does with its startup check.
+ */
+export function rendererCapabilityReport(): Promise<RendererCapabilityReport> {
+  sharedReport ??= checkRendererCapabilities();
+  return sharedReport;
+}
+
+/** Makes later scrapes in this process select renderers from `report`; undefined checks again. */
+export function setRendererCapabilityReport(
+  report: RendererCapabilityReport | Promise<RendererCapabilityReport> | undefined,
+): void {
+  sharedReport = report === undefined ? undefined : Promise.resolve(report);
+}
+
 async function checkBackend(check: {
   name: BrowserRendererName;
   executable: string | null;

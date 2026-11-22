@@ -1,8 +1,8 @@
 import { DiscoveryWorker, JobWorker, WebhookWorker } from "@buncrawl/jobs";
 import { pruneJobEvents, pruneScrapeCache } from "@buncrawl/db";
-import { checkRendererCapabilities, type RendererCapabilityReport } from "@buncrawl/renderer";
 
 import { corsHeaders, endpoint } from "./http";
+import { checkRenderers } from "./renderers";
 import { createRoutes } from "./routes";
 import { closeReplacedDb, replaceRuntime, type ServerRuntime } from "./runtime";
 import { SERVER_IDLE_TIMEOUT_SECONDS } from "./server-config";
@@ -34,19 +34,6 @@ async function startRuntime(previous: ServerRuntime | undefined): Promise<Server
   for (const signal of signals) process.on(signal, onSignal);
 
   return { db, stop };
-}
-
-/** Logs which browser renderers this host can run; HTTP-only scraping works without any. */
-async function checkRenderers(): Promise<RendererCapabilityReport> {
-  const report = await checkRendererCapabilities();
-  for (const renderer of report.renderers) {
-    if (renderer.capabilities.available) {
-      console.info(`Renderer ${renderer.name}: ${renderer.version} (${renderer.executable})`);
-    } else {
-      console.warn(`Renderer ${renderer.name} unavailable: ${renderer.error}`);
-    }
-  }
-  return report;
 }
 
 async function main(): Promise<void> {

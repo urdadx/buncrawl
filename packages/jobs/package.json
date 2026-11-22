@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@buncrawl/config": "workspace:*",
+    "@buncrawl/renderer": "workspace:*",
     "@types/bun": "catalog:",
     "typescript": "catalog:"
   }

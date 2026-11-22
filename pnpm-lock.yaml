@@ -492,6 +492,9 @@ importers:
       '@buncrawl/config':
         specifier: workspace:*
         version: link:../config
+      '@buncrawl/renderer':
+        specifier: workspace:*
+        version: link:../renderer
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.2

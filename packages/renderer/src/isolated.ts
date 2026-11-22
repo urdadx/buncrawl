@@ -1,5 +1,6 @@
 import { errorCodeOf } from "@buncrawl/core";
 
+import type { BrowserRendererName, RendererCapabilityReport } from "./capabilities";
 import { RendererChain } from "./chain";
 import {
   LightpandaRenderer,
@@ -260,17 +261,37 @@ export function isolatedRendererConfigs(env: Record<string, string | undefined> 
   };
 }
 
-export function createIsolatedDefaultRenderer(options: IsolatedRendererOptions = {}): Renderer {
-  const configs = isolatedRendererConfigs();
+export interface IsolatedDefaultRendererOptions extends IsolatedRendererOptions {
+  /** A capability check result; renderers it marks unavailable are left out. */
+  report?: RendererCapabilityReport;
+  /** Where the worker configurations are read from; defaults to `process.env`. */
+  env?: Record<string, string | undefined>;
+}
+
+/**
+ * Lightpanda first with Chrome as its fallback, each in worker processes. Without a report, a
+ * renderer is used when its executable resolves; with one, only when the report's check passed.
+ */
+export function createIsolatedDefaultRenderer(
+  options: IsolatedDefaultRendererOptions = {},
+): Renderer {
+  const { report, env, ...poolOptions } = options;
+  const configs = isolatedRendererConfigs(env);
+  const checked = (name: BrowserRendererName) =>
+    report?.renderers.find((renderer) => renderer.name === name)?.capabilities;
   const renderers: Renderer[] = [];
-  if (configs.lightpanda?.type === "lightpanda") {
-    const lightpanda = new LightpandaRenderer({ ...configs.lightpanda.options, server: false });
-    renderers.push(new IsolatedRenderer(configs.lightpanda, lightpanda.capabilities(), options));
+  const lightpandaChecked = checked("lightpanda");
+  if (configs.lightpanda?.type === "lightpanda" && (!report || lightpandaChecked?.available)) {
+    const capabilities =
+      lightpandaChecked ??
+      new LightpandaRenderer({ ...configs.lightpanda.options, server: false }).capabilities();
+    renderers.push(new IsolatedRenderer(configs.lightpanda, capabilities, poolOptions));
   }
 
-  const safeWebview = new WebViewRenderer({ backend: "chrome" });
-  if (safeWebview.capabilities().available || renderers.length === 0) {
-    renderers.push(new IsolatedRenderer(configs.webview, safeWebview.capabilities(), options));
+  const webviewCapabilities =
+    checked("webview") ?? new WebViewRenderer({ backend: "chrome" }).capabilities();
+  if (webviewCapabilities.available || renderers.length === 0) {
+    renderers.push(new IsolatedRenderer(configs.webview, webviewCapabilities, poolOptions));
   }
   return renderers.length === 1 ? renderers[0]! : new RendererChain(renderers);
 }
