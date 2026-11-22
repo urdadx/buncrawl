@@ -1,17 +1,29 @@
 #!/usr/bin/env bash
 # Smoke-tests a built server image without the public internet: runs the real-browser smoke tests
-# inside it, then starts the server and checks that /v1/capabilities reports both renderers.
-# Usage: apps/server/scripts/smoke-image.sh <image>
+# in its `smoke` target (the same image plus the renderer sources), then starts the server image and
+# checks that /v1/capabilities reports both renderers.
+# Usage: apps/server/scripts/smoke-image.sh <image> <smoke-target-image>
 set -euo pipefail
 
-image="${1:?usage: smoke-image.sh <image>}"
+image="${1:?usage: smoke-image.sh <image> <smoke-target-image>}"
+smoke_image="${2:?usage: smoke-image.sh <image> <smoke-target-image>}"
 name="buncrawl-smoke-$$"
 
-echo "--- Browser smoke tests inside ${image}"
-docker run --rm --init \
+echo "--- Browser smoke tests inside ${smoke_image}"
+# `bun test` exits 0 when a file registers no tests (e.g. it was skipped or copied empty), so
+# require that tests actually passed.
+smoke_output="$(docker run --rm --init \
   -e BUNCRAWL_RUN_BROWSER_SMOKE=1 \
   -w /app/packages/renderer \
-  "${image}" bun test test/browser-smoke.test.ts
+  "${smoke_image}" bun test ./test/browser-smoke.test.ts 2>&1)" || {
+  echo "${smoke_output}"
+  exit 1
+}
+echo "${smoke_output}"
+if ! grep -Eq '^ *[1-9][0-9]* pass' <<<"${smoke_output}" || grep -Eq '^ *[1-9][0-9]* (fail|skip)' <<<"${smoke_output}"; then
+  echo "Browser smoke tests did not all run and pass" >&2
+  exit 1
+fi
 
 echo "--- Server capability check"
 cleanup() {

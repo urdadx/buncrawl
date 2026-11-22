@@ -1,22 +1,33 @@
 # syntax=docker/dockerfile:1.7
 
 # Pinned runtime and browser builds. Bump a version together with its checksum; the browser smoke
-# tests (packages/renderer/test/browser-smoke.test.ts) run inside this image in CI.
+# tests (packages/renderer/test/browser-smoke.test.ts) run in the `smoke` target, which is this
+# image plus the renderer sources, in CI.
 ARG BUN_VERSION=1.4.2
 ARG CHROME_VERSION=158.0.8127.36
 ARG CHROME_SHA256=2d3a23017323c54fd457a678e4351f895c4076d8050e39d5aa6247f93448b73a
 ARG LIGHTPANDA_VERSION=1.0.5
 ARG LIGHTPANDA_SHA256=0ec21fa4867ab9e82b35285ff4ab0e7336c6c1d89f26fe991f27d73c8a678bd7
 
+FROM oven/bun:${BUN_VERSION}-slim AS bun
+
+# Compiles the server into one executable (`pnpm --filter server compile`); the image ships that
+# file instead of the workspace and its node_modules.
 FROM node:24-slim AS builder
 RUN npm install -g pnpm@11.23.0
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 
-COPY . .
-RUN --mount=type=secret,id=web_env,target=/app/apps/web/.env.local --mount=type=secret,id=server_env,target=/app/apps/server/.env.local --mount=type=cache,target=/pnpm-store pnpm install --frozen-lockfile --store-dir /pnpm-store
+# Downloads every locked package into a store inside this layer, so source changes reuse it (also
+# from a registry cache such as type=gha, which does not keep cache mounts) and only re-link below.
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm fetch --prod --store-dir /pnpm-store
 
-ENV NODE_ENV=production
-RUN --mount=type=secret,id=web_env,target=/app/apps/web/.env.local --mount=type=secret,id=server_env,target=/app/apps/server/.env.local cd apps/server && pnpm run build
+COPY . .
+# Only the server and the workspace packages it imports, without dev dependencies. No install
+# scripts: compiling needs neither varlock's generated env types nor any native build step.
+RUN pnpm install --offline --frozen-lockfile --prod --ignore-scripts --filter "server..." --store-dir /pnpm-store
+RUN cd apps/server && bun run compile
 
 # Downloads and verifies the browsers. Chrome for Testing publishes x86-64 Linux builds only, so the
 # image is linux/amd64.
@@ -40,7 +51,7 @@ RUN mkdir -p /opt/lightpanda \
   && echo "${LIGHTPANDA_SHA256}  /opt/lightpanda/lightpanda" | sha256sum -c - \
   && chmod 0755 /opt/lightpanda/lightpanda
 
-FROM oven/bun:${BUN_VERSION}-slim AS runner
+FROM bun AS runtime
 # Shared libraries headless Chrome loads, plus fonts so pages and screenshots render real text:
 # Liberation is metric-compatible with Arial/Times/Courier, Noto covers CJK and emoji.
 RUN apt-get update \
@@ -91,15 +102,24 @@ RUN missing="$(ldd "$BUN_CHROME_PATH" "$BUNCRAWL_LIGHTPANDA_PATH" | grep 'not fo
   if [ -n "$missing" ]; then echo "Missing browser libraries:\n$missing" >&2; exit 1; fi; \
   "$BUN_CHROME_PATH" --version && "$BUNCRAWL_LIGHTPANDA_PATH" version
 
-WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=builder --chown=bun:bun /app /app
+# The compiled server: Bun runtime, server, and browser and extraction workers in one read-only file.
+COPY --from=builder /app/apps/server/server /app/server
 
 # The entrypoint starts as root only to make /data writable, then runs everything as `bun`:
 # the browsers never run as root.
 COPY --chmod=0755 apps/server/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 EXPOSE 3000
 
-WORKDIR /app/apps/server
+WORKDIR /app
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["bun", "dist/index.mjs"]
+CMD ["/app/server"]
+
+# CI only: the runtime image plus the renderer sources and their production dependencies, so the
+# browser smoke tests run against exactly the runtime image's browsers, libraries and fonts.
+FROM runtime AS smoke
+COPY --from=builder /app/node_modules /app/node_modules
+COPY --from=builder /app/packages /app/packages
+
+# The default target, and the image to deploy.
+FROM runtime AS runner
