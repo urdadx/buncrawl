@@ -345,6 +345,13 @@ Build this work in dependency order. The first vertical slice is a durable `/v1/
 
 #### 12.1 Runtime and Storage Boundaries
 
+- DONE: API keys. `BUNCRAWL_API_KEY` holds one or more comma-separated keys (16+ characters each).
+  When set, every endpoint except `GET /` and the dashboard's `/trpc` health query requires
+  `Authorization: Bearer <key>` and answers `401 UNAUTHORIZED` otherwise; CORS preflight stays
+  open. Keys are compared as SHA-256 digests with `timingSafeEqual`, against every configured
+  key. Unset, the API stays open and the server warns at startup. `endpoint(handler, { public })`
+  in `apps/server/src/http.ts` is the only place routes opt out.
+
 - Keep the self-hosted server compatible with `bun build --compile`. DONE: `pnpm --filter server compile`
   builds `apps/server/server`, which runs from any folder with plain environment variables and
   renders with Lightpanda and Chrome:

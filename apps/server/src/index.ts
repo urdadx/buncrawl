@@ -1,7 +1,7 @@
 import { DiscoveryWorker, JobWorker, WebhookWorker } from "@buncrawl/jobs";
 import { pruneJobEvents, pruneScrapeCache } from "@buncrawl/db";
 
-import { corsHeaders, endpoint } from "./http";
+import { apiKeyRequired, corsHeaders, endpoint } from "./http";
 import { checkRenderers } from "./renderers";
 import { createRoutes } from "./routes";
 import { closeReplacedDb, replaceRuntime, type ServerRuntime } from "./runtime";
@@ -55,6 +55,11 @@ async function main(): Promise<void> {
   });
 
   console.info(`Server listening at ${server.url}`);
+  if (!apiKeyRequired) {
+    console.warn(
+      "BUNCRAWL_API_KEY is not set: anyone who can reach this server can use it. Set it before exposing the server.",
+    );
+  }
 }
 
 main().catch((error) => {

@@ -5,12 +5,15 @@ import { createContext } from "../context";
 import { endpoint } from "../http";
 
 export const trpcRoutes = {
-  "/trpc/*": endpoint((request) =>
-    fetchRequestHandler({
-      endpoint: "/trpc",
-      req: request,
-      router: appRouter,
-      createContext,
-    }),
+  "/trpc/*": endpoint(
+    (request) =>
+      fetchRequestHandler({
+        endpoint: "/trpc",
+        req: request,
+        router: appRouter,
+        createContext,
+      }),
+    // The router only has the dashboard's health check; protect any procedure that does more.
+    { public: true },
   ),
 };

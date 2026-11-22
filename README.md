@@ -62,6 +62,12 @@ The API is running at [http://localhost:3000](http://localhost:3000).
 - Logs: pnpm run docker:logs
 - Stop: pnpm run docker:down
 
+Set `BUNCRAWL_API_KEY` (at least 16 characters, e.g. `openssl rand -hex 24`) in `apps/server/.env`
+before exposing the server: clients then send `Authorization: Bearer <key>`, as Firecrawl SDKs
+do. Several keys can be listed, separated by commas, to rotate them. Without it the API is open to
+anyone who can reach it, and the server logs a warning at startup. `GET /` (health) and the
+dashboard's `/trpc` health query stay public.
+
 Environment variables are read from each app's `.env` file (baked into web builds for public variables) and overridden in `docker-compose.yml` for container networking.
 
 Docker Compose persists SQLite at `./.data/buncrawl.db` and artifacts under
@@ -84,6 +90,7 @@ PORT=3000 CORS_ORIGIN=http://localhost:3001 DATABASE_URL=file:/var/lib/buncrawl/
 - Required: `CORS_ORIGIN`, `DATABASE_URL` (a `file:` path or a libSQL URL), and
   `BUNCRAWL_ARTIFACTS_PATH`. The binary does not fall back to the development paths in
   `apps/server/.env.schema`; it exits and names any missing or invalid variable.
+- Recommended: `BUNCRAWL_API_KEY`, the Bearer key clients must send (see Docker Compose above).
 - Optional: every other variable in `apps/server/.env.schema` (R2, `BUNCRAWL_PROXY_URL`,
   `BUNCRAWL_WEBHOOK_SECRET`, and the browser settings below).
 - Browser rendering uses the host's browsers: Lightpanda from `BUNCRAWL_LIGHTPANDA_PATH` or

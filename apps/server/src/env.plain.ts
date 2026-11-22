@@ -29,6 +29,7 @@ export const plainEnvSchema = v.object({
   BUNCRAWL_R2_SECRET_ACCESS_KEY: v.optional(text),
   BUNCRAWL_R2_REGION: v.optional(text),
   BUNCRAWL_PROXY_URL: v.optional(url),
+  BUNCRAWL_API_KEY: v.optional(v.pipe(v.string(), v.minLength(16))),
   BUNCRAWL_WEBHOOK_SECRET: v.optional(v.pipe(v.string(), v.minLength(16))),
   BUN_CHROME_PATH: v.optional(text),
   BUNCRAWL_LIGHTPANDA_PATH: v.optional(text),
