@@ -66,7 +66,8 @@ curl -fsSL https://raw.githubusercontent.com/urdadx/buncrawl/main/install.sh | s
 buncrawl https://example.com
 ```
 
-`BUNCRAWL_VERSION=v1.2.3` installs a specific release and `BUNCRAWL_INSTALL_DIR` picks the folder
+`BUNCRAWL_VERSION=v1.2.3` installs a specific release (needed for pre-releases such as
+`v1.2.3-rc.1`, which the default skips) and `BUNCRAWL_INSTALL_DIR` picks the folder
 (default `/usr/local/bin` when writable, else `~/.local/bin`; it never uses sudo). Pushing a `v*`
 tag builds the release (`.github/workflows/release.yml`, `apps/server/scripts/build-release.sh`)
 and publishes the image as `ghcr.io/urdadx/buncrawl`.
@@ -202,3 +203,7 @@ buncrawl/
 - `pnpm run db:migrate`: Run database migrations
 - `pnpm run docker:build`: Build the Docker Compose images
 - `pnpm run docker:up`: Build and start the Docker Compose stack
+
+## License
+
+[MIT](LICENSE)
