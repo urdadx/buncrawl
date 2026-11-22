@@ -90,6 +90,10 @@ describe("compiled executable", () => {
     expect(usage.exitCode).toBe(2);
     expect(usage.stderr.toString()).toContain("URL must be valid");
     expect(usage.stdout.toString()).toBe("");
+
+    const crawl = Bun.spawnSync([executable, "crawl"], { cwd: dir, env: { PATH: "" } });
+    expect(crawl.exitCode).toBe(2);
+    expect(crawl.stderr.toString()).toContain("Pass exactly one URL to crawl");
   }, 30_000);
 
   test("starts with no configuration, keeping data in ./data", async () => {

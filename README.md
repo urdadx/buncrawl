@@ -155,6 +155,30 @@ The same binary scrapes a single page without a server, database or configuratio
   as with `renderJs: "auto"`. Renders use local Chrome or Lightpanda found the same way as the
   server. `buncrawl --help` lists every option.
 
+Map, crawl and batch scrape run the API's jobs in-process, with the same handlers and workers
+as the server, over a private in-memory database:
+
+```bash
+buncrawl map https://example.com --limit 500
+```
+
+```bash
+buncrawl crawl https://example.com --limit 50 --depth 2 --out pages
+```
+
+```bash
+buncrawl batch urls.txt --format html > pages.jsonl
+```
+
+- `map` prints one URL per line (`--json` for an array). `crawl` and `batch` print JSON Lines,
+  one item per page as `GET /v1/crawl/:id` returns it; `crawl --out <dir>` (and `batch --out`)
+  instead writes one Markdown file per page, plus a PNG per page with `--screenshots`.
+- Limits mirror the API: `--limit` (default 100), `--depth` (default 10) and `--timeout` for the
+  whole job (default 120000 ms); `--subdomains` and `--path-prefix` widen or narrow the scope.
+- Progress goes to stderr. The first Ctrl-C cancels the job and still prints the pages that
+  finished (exit 130); a second one quits at once. `--db <file>` keeps the job in a SQLite file
+  instead of memory for very large crawls.
+
 ## Project Structure
 
 ```

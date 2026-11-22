@@ -378,6 +378,14 @@ Build this work in dependency order. The first vertical slice is a durable `/v1/
     to `./data` (the image sets `/data`), and `CORS_ORIGIN` to `*` everywhere (keys travel in a
     header, not cookies). Redis is opt-in: without `REDIS_URL`, `RedisJobDispatch` creates no
     clients and workers rely on polling; the compose stack no longer runs Redis.
+  - DONE: CLI jobs. `buncrawl map|crawl|batch` (`src/cli-jobs.ts`) open a private SQLite
+    database (memory, or `--db <file>`), start the server's `DiscoveryWorker` or `JobWorker`, and
+    drive the job through the v1 route handlers in-process: POST to submit, GET with a cursor to
+    page results, DELETE when Ctrl-C cancels. Validation, limits and result shapes therefore
+    match the API. Flags are checked against `jobSubmissionSchema` before any work starts.
+    Output: URLs (map), JSON Lines of items that ran (crawl, batch), or Markdown and PNG files
+    with URL-derived names restricted to `[A-Za-z0-9._-]` (`--out`). Documents stay inline in
+    the job database; the CLI has no artifact store.
   - DONE: releases. A `v*` tag runs `.github/workflows/release.yml`: `scripts/build-release.sh`
     cross-compiles linux and darwin, x64 and arm64, stamps `--version` through
     `--define BUNCRAWL_VERSION`, and publishes `buncrawl-<os>-<arch>.tar.gz` plus `SHA256SUMS`.
