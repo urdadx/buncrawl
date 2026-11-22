@@ -67,6 +67,7 @@ describe("parseCli", () => {
       expect(parseCli(args)).toMatchObject({ kind: "help", exitCode: 2 });
     }
     expect(parseCli(["--help"])).toEqual({ kind: "help", exitCode: 0 });
+    expect(parseCli(["--version"])).toEqual({ kind: "version" });
   });
 });
 

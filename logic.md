@@ -378,6 +378,12 @@ Build this work in dependency order. The first vertical slice is a durable `/v1/
     to `./data` (the image sets `/data`), and `CORS_ORIGIN` to `*` everywhere (keys travel in a
     header, not cookies). Redis is opt-in: without `REDIS_URL`, `RedisJobDispatch` creates no
     clients and workers rely on polling; the compose stack no longer runs Redis.
+  - DONE: releases. A `v*` tag runs `.github/workflows/release.yml`: `scripts/build-release.sh`
+    cross-compiles linux and darwin, x64 and arm64, stamps `--version` through
+    `--define BUNCRAWL_VERSION`, and publishes `buncrawl-<os>-<arch>.tar.gz` plus `SHA256SUMS`.
+    `install.sh` installs one, refusing a checksum mismatch, without sudo. The image workflow
+    pushes `ghcr.io/<repo>` after the smoke tests: `main` and `sha-*` from main, the version and
+    `latest` from tags. Windows and musl Linux are not built yet.
   - DONE: CLI. `src/cli.ts` makes the binary `buncrawl [serve]` (the default, so Docker is
     unchanged) or `buncrawl [scrape] <url> [options]`, which runs `scrape()` in-process with no
     database, Redis or server env. Options map onto the v1 scrape request and are validated by

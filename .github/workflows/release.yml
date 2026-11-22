@@ -1,0 +1,49 @@
+name: Release
+
+# Pushing a v* tag publishes a GitHub release with the single-file binary for Linux and macOS
+# (x64 and arm64) and SHA256SUMS, which install.sh downloads. The server image workflow publishes
+# the matching Docker image for the same tag.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  binaries:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.23.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      # The same install as the image's builder: the server and its workspace packages only.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prod --ignore-scripts --filter "server..."
+
+      - name: Build the binaries
+        run: apps/server/scripts/build-release.sh "${{ github.ref_name }}" release
+
+      # The runner can execute the linux-x64 build: check it starts and reports the tag.
+      - name: Check the linux-x64 binary
+        run: |
+          tar -xzf release/buncrawl-linux-x64.tar.gz -C "${RUNNER_TEMP}"
+          test "$("${RUNNER_TEMP}/buncrawl" --version)" = "buncrawl ${{ github.ref_name }}"
+          "${RUNNER_TEMP}/buncrawl" --help >/dev/null
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" release/* --verify-tag --generate-notes

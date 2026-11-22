@@ -23,10 +23,15 @@ Scrape options:
       --timeout <ms>       Overall deadline (default 30000)
       --json               Print the full API response as JSON
   -h, --help               Show this help
+  -v, --version            Print the version
 
 One text format prints as-is; several formats, or --json, print JSON. Failures print to stderr
 and exit 1 (with --json, the failure response goes to stdout). Browser rendering uses
 Chrome (BUN_CHROME_PATH or PATH) and Lightpanda (BUNCRAWL_LIGHTPANDA_PATH or PATH) when present.`;
+
+// Replaced by `--define BUNCRAWL_VERSION=...` in release builds (scripts/build-release.sh).
+declare const BUNCRAWL_VERSION: string | undefined;
+export const VERSION = typeof BUNCRAWL_VERSION === "string" ? BUNCRAWL_VERSION : "dev";
 
 const TEXT_FORMATS = ["markdown", "html", "rawHtml", "links"] as const;
 type TextFormat = (typeof TEXT_FORMATS)[number];
@@ -34,6 +39,7 @@ type TextFormat = (typeof TEXT_FORMATS)[number];
 /** Where a parsed command line leads. */
 export type CliCommand =
   | { kind: "serve" }
+  | { kind: "version" }
   | { kind: "help"; exitCode: number; message?: string }
   | { kind: "scrape"; request: ScrapeRequest; screenshotPath?: string; json: boolean };
 
@@ -43,6 +49,7 @@ export function parseCli(args: string[]): CliCommand {
   if (first === undefined || first === "serve") return { kind: "serve" };
   if (first === "-h" || first === "--help" || first === "help")
     return { kind: "help", exitCode: 0 };
+  if (first === "-v" || first === "--version" || first === "version") return { kind: "version" };
   const scrapeArgs = first === "scrape" ? rest : /^https?:\/\//i.test(first) ? args : undefined;
   if (!scrapeArgs) return usageError(`Unknown command: ${first}`);
 
@@ -121,6 +128,10 @@ export async function main(args: string[]): Promise<void> {
   const command = parseCli(args);
   if (command.kind === "serve") {
     await import("./index");
+    return;
+  }
+  if (command.kind === "version") {
+    console.log(`buncrawl ${VERSION}`);
     return;
   }
   if (command.kind === "help") {

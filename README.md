@@ -53,17 +53,33 @@ The API is running at [http://localhost:3000](http://localhost:3000).
 
 ## Deployment
 
+### Install the binary
+
+Linux and macOS (x64 and arm64), from the latest GitHub release; the script checks the download
+against the release's `SHA256SUMS`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/urdadx/buncrawl/main/install.sh | sh
+```
+
+```bash
+buncrawl https://example.com
+```
+
+`BUNCRAWL_VERSION=v1.2.3` installs a specific release and `BUNCRAWL_INSTALL_DIR` picks the folder
+(default `/usr/local/bin` when writable, else `~/.local/bin`; it never uses sudo). Pushing a `v*`
+tag builds the release (`.github/workflows/release.yml`, `apps/server/scripts/build-release.sh`)
+and publishes the image as `ghcr.io/urdadx/buncrawl`.
+
 ### Docker
 
 The server image runs with no configuration; the volume keeps its SQLite database and artifacts:
 
 ```bash
-docker build -f apps/server/Dockerfile -t buncrawl-server .
+docker run -d -p 3000:3000 -v buncrawl:/data -e BUNCRAWL_API_KEY=change-me-to-16-plus-chars ghcr.io/urdadx/buncrawl:latest
 ```
 
-```bash
-docker run -d -p 3000:3000 -v buncrawl:/data -e BUNCRAWL_API_KEY=change-me-to-16-plus-chars buncrawl-server
-```
+To build it yourself instead: `docker build -f apps/server/Dockerfile -t buncrawl-server .`
 
 Every variable in `apps/server/.env.schema` can be passed with `-e`. `GET /v1/capabilities` shows
 which browsers the image found.
