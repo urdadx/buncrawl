@@ -316,6 +316,10 @@ Decisions:
   per worker process, the CDP request guard, and the DNS-pinning safety proxy. Set it to `0` where
   the container may create user namespaces.
 - At startup the server checks each renderer: its executable resolves, prints a version, and
+- The server image's entrypoint starts as root only to create `/data` and, when anything in it
+  belongs to another user, `chown -R` it to `bun` (UID 1000). It then drops to `bun` with
+  `setpriv`. A bind-mounted `./.data` therefore works whichever host user created it, including
+  data written as root by earlier images. A container started with `--user` skips that step.
   loads a `data:` probe page with the same flags renders use. This catches missing libraries and
   a missing sandbox before the first render. `GET /v1/capabilities` returns that report
   (`renderers[]` with the executable, version, error, and the existing `RendererCapabilities`,

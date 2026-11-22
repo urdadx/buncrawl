@@ -95,9 +95,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder --chown=bun:bun /app /app
 
-# Never run the browsers as root.
-USER bun
+# The entrypoint starts as root only to make /data writable, then runs everything as `bun`:
+# the browsers never run as root.
+COPY --chmod=0755 apps/server/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 EXPOSE 3000
 
 WORKDIR /app/apps/server
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["bun", "dist/index.mjs"]

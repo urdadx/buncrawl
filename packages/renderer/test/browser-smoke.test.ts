@@ -64,24 +64,28 @@ smoke("browser smoke", () => {
   ): Promise<RenderResult> =>
     renderer.render({ ...request, deadline: new Deadline(RENDER_TIMEOUT_MS) });
 
-  test("the capability check finds both browsers", async () => {
-    const report = await checkRendererCapabilities();
-    for (const renderer of report.renderers) {
-      expect({ name: renderer.name, error: renderer.error }).toEqual({
-        name: renderer.name,
-        error: undefined,
+  test(
+    "the capability check finds both browsers",
+    async () => {
+      const report = await checkRendererCapabilities();
+      for (const renderer of report.renderers) {
+        expect({ name: renderer.name, error: renderer.error }).toEqual({
+          name: renderer.name,
+          error: undefined,
+        });
+        expect(renderer.version).toBeTruthy();
+      }
+      expect(report.summary).toEqual({
+        available: true,
+        browser: true,
+        javascript: true,
+        screenshots: true,
+        cdp: true,
+        computedStyles: true,
       });
-      expect(renderer.version).toBeTruthy();
-    }
-    expect(report.summary).toEqual({
-      available: true,
-      browser: true,
-      javascript: true,
-      screenshots: true,
-      cdp: true,
-      computedStyles: true,
-    });
-  });
+    },
+    TEST_TIMEOUT_MS,
+  );
 
   test(
     "Lightpanda runs the fixture's script and takes a screenshot",
