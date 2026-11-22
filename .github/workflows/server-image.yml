@@ -8,7 +8,7 @@ on:
 
 permissions:
   contents: read
-  # Publishes the image to ghcr.io after the smoke tests pass; never from pull requests.
+  # Publishes the image to ghcr.io after the image check passes; never from pull requests.
   packages: write
 
 concurrency:
@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-smoke-test:
+  build-and-check:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -36,21 +36,21 @@ jobs:
           cache-to: type=gha,mode=max
 
       # The runtime image plus the renderer sources; reuses the layers built above.
-      - name: Build the smoke-test target
+      - name: Build the image-check target
         uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/server/Dockerfile
-          target: smoke
+          target: image-check
           platforms: linux/amd64
-          tags: buncrawl-server:ci-smoke
+          tags: buncrawl-server:ci-image-check
           load: true
           cache-from: type=gha
 
       # Real Lightpanda and Chrome renders of a local fixture, then /v1/capabilities from the
       # running server; nothing here reaches the public internet.
-      - name: Smoke-test the image
-        run: apps/server/scripts/smoke-image.sh buncrawl-server:ci buncrawl-server:ci-smoke
+      - name: Check the image
+        run: apps/server/scripts/check-image.sh buncrawl-server:ci buncrawl-server:ci-image-check
 
       # ghcr.io/<owner>/<repo>: `main` and `sha-<commit>` from main; `<version>`, `<major>.<minor>`
       # and `latest` from v* tags.

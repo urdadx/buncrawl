@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
-# Pinned runtime and browser builds. Bump a version together with its checksum; the browser smoke
-# tests (packages/renderer/test/browser-smoke.test.ts) run in the `smoke` target, which is this
+# Pinned runtime and browser builds. Bump a version together with its checksum; the real-browser
+# tests (packages/renderer/test/real-browsers.test.ts) run in the `image-check` target, which is this
 # image plus the renderer sources, in CI.
 ARG BUN_VERSION=1.4.2
 ARG CHROME_VERSION=158.0.8127.36
@@ -120,8 +120,8 @@ ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["/app/server"]
 
 # CI only: the runtime image plus the renderer sources and their production dependencies, so the
-# browser smoke tests run against exactly the runtime image's browsers, libraries and fonts.
-FROM runtime AS smoke
+# real-browser tests run against exactly the runtime image's browsers, libraries and fonts.
+FROM runtime AS image-check
 COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/packages /app/packages
 

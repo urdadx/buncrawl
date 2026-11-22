@@ -4,11 +4,11 @@
 
 ```text
 buncrawl/
-├── .github/workflows/server-image.yml    # DONE: builds the image and runs the browser smoke tests
+├── .github/workflows/server-image.yml    # DONE: builds the image and runs the image check
 ├── apps/
 │   ├── server/
 │   │   ├── Dockerfile                    # DONE: pinned Bun, Chrome for Testing, Lightpanda, fonts
-│   │   ├── scripts/smoke-image.sh        # DONE: offline smoke checks against a built image and its smoke target
+│   │   ├── scripts/check-image.sh        # DONE: image check, offline, against a built image
 │   │   └── src/
 │   │       ├── index.ts                  # Bun.serve entry point
 │   │       ├── executable.ts             # DONE: `pnpm compile` entry; server or browser worker
@@ -48,8 +48,8 @@ buncrawl/
 │   │
 │   ├── renderer/
 │   │   ├── test/
-│   │   │   ├── browser-smoke.test.ts     # Real-browser smoke tests (BUNCRAWL_RUN_BROWSER_SMOKE=1)
-│   │   │   └── fixtures/smoke.html       # Offline fixture page for the smoke tests
+│   │   │   ├── real-browsers.test.ts     # Real-browser tests (BUNCRAWL_TEST_REAL_BROWSERS=1)
+│   │   │   └── fixtures/real-browsers.html # Offline fixture page for the real-browser tests
 │   │   └── src/
 │   │       ├── index.ts
 │   │       ├── renderer.ts               # Replaceable renderer interface
@@ -287,13 +287,13 @@ Implement `apps/server/src/routes/v1/scrape.ts`:
 - DONE: Install pinned Lightpanda and Chrome/Chromium builds and required fonts/libraries.
 - DONE: Set or verify `BUN_CHROME_PATH` and the Lightpanda executable path.
 - DONE: Add startup capability checks and `/v1/capabilities`.
-- DONE: Run real Lightpanda and WebView smoke tests in CI and the production image.
+- DONE: Run real Lightpanda and WebView tests in CI and the production image (the image check).
 
 Decisions:
 
 - `apps/server/Dockerfile` pins Bun (`oven/bun:1.4.2-slim`, Debian trixie), Chrome for Testing's
   `chrome-headless-shell` 158.0.8127.36 and Lightpanda 1.0.5 as build arguments, and verifies both
-  downloads by SHA-256. Bump a version and its checksum together; CI runs the smoke tests against
+  downloads by SHA-256. Bump a version and its checksum together; CI runs the image check against
   the result.
 - Chrome for Testing has no arm64 Linux build, so the image is `linux/amd64` only and the build
   fails early on other architectures.
@@ -327,22 +327,21 @@ Decisions:
   (`renderers[]` with the executable, version, error, and the existing `RendererCapabilities`,
   plus a `summary` aggregated like `RendererChain`). Unavailable renderers log a warning;
   HTTP-only scraping still works.
-- Smoke tests (`packages/renderer/test/browser-smoke.test.ts`, run with
-  `BUNCRAWL_RUN_BROWSER_SMOKE=1`) render `test/fixtures/smoke.html` as a `data:` URL through the
-  isolated worker pool with the production worker configuration. They check that scripts run,
-  the screenshot decodes and contains drawn text, branding colors and fonts are measured, and
-  neither browser contacts a loopback service. The network guards block every private address,
-  so a local HTTP fixture server cannot be rendered, and `data:` URLs keep the tests offline.
-  Lightpanda's server mode now reports status 200 for `data:` documents, as `lightpanda fetch`
-  does.
+- Real-browser tests (`packages/renderer/test/real-browsers.test.ts`, run with
+  `BUNCRAWL_TEST_REAL_BROWSERS=1`) render `test/fixtures/real-browsers.html` as a `data:` URL
+  through the isolated worker pool with the production worker configuration. They check that scripts
+  run, the screenshot decodes and contains drawn text, branding colors and fonts are measured, and
+  neither browser contacts a loopback service. The network guards block every private address, so a
+  local HTTP fixture server cannot be rendered, and `data:` URLs keep the tests offline.
+  Lightpanda's server mode now reports status 200 for `data:` documents, as `lightpanda fetch` does.
 - The image runs the single-file binary (`pnpm --filter server compile`, see 12.1) instead of the
   workspace and its `node_modules`. The builder fetches every locked package from
   `pnpm-lock.yaml` alone into a store layer, so a source change only re-links the server's
   production dependencies offline and recompiles. The server build needs no `.env` secrets.
-- The Dockerfile's `smoke` target is the runtime image plus the renderer sources and their
-  production dependencies. `apps/server/scripts/smoke-image.sh <image> <smoke-image>` runs the
-  smoke tests in the `smoke` image, then starts the deployable image and requires
-  `/v1/capabilities` to report both renderers with every feature.
+- The image check: the Dockerfile's `image-check` target is the runtime image plus the renderer
+  sources and their production dependencies. `apps/server/scripts/check-image.sh <image>
+  <image-check-image>` runs the real-browser tests in the `image-check` image, then starts the
+  deployable image and requires `/v1/capabilities` to report both renderers with every feature.
   `.github/workflows/server-image.yml` builds both targets with the GitHub Actions cache and runs
   that script on every push to `main` and every pull request.
 
@@ -391,7 +390,7 @@ Build this work in dependency order. The first vertical slice is a durable `/v1/
     cross-compiles linux and darwin, x64 and arm64, stamps `--version` through
     `--define BUNCRAWL_VERSION`, and publishes `buncrawl-<os>-<arch>.tar.gz` plus `SHA256SUMS`.
     `install.sh` installs one, refusing a checksum mismatch, without sudo. The image workflow
-    pushes `ghcr.io/<repo>` after the smoke tests: `main` and `sha-*` from main, the version and
+    pushes `ghcr.io/<repo>` after the image check: `main` and `sha-*` from main, the version and
     `latest` from tags. Windows and musl Linux are not built yet.
   - DONE: CLI. `src/cli.ts` makes the binary `buncrawl [serve]` (the default, so Docker is
     unchanged) or `buncrawl [scrape] <url> [options]`, which runs `scrape()` in-process with no

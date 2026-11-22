@@ -6,20 +6,20 @@ import { IsolatedRenderer, isolatedRendererConfigs } from "../src/isolated";
 import type { RenderRequest, RenderResult } from "../src/renderer";
 
 /**
- * Real-browser smoke tests for CI and the production image: they render a local fixture through
+ * Real-browser tests for CI and the image check: they render a local fixture through
  * the isolated worker pool, exactly as scrapes do, and never touch the public internet. Set
- * BUNCRAWL_RUN_BROWSER_SMOKE=1 to run them; a missing browser then fails instead of skipping.
+ * BUNCRAWL_TEST_REAL_BROWSERS=1 to run them; a missing browser then fails instead of skipping.
  */
-const smoke = process.env.BUNCRAWL_RUN_BROWSER_SMOKE === "1" ? describe : describe.skip;
+const realBrowsers = process.env.BUNCRAWL_TEST_REAL_BROWSERS === "1" ? describe : describe.skip;
 
 const RENDER_TIMEOUT_MS = 30_000;
 const TEST_TIMEOUT_MS = 60_000;
 
-const fixture = await Bun.file(new URL("./fixtures/smoke.html", import.meta.url)).bytes();
+const fixture = await Bun.file(new URL("./fixtures/real-browsers.html", import.meta.url)).bytes();
 const fixtureUrl = `data:text/html;base64,${fixture.toBase64()}`;
 const blankUrl = "data:text/html,<!doctype html><title>Blank</title><body></body>";
 
-smoke("browser smoke", () => {
+realBrowsers("real browsers", () => {
   // The same worker configurations scrapes use, including BUNCRAWL_CHROME_NO_SANDBOX.
   const configs = isolatedRendererConfigs();
   const lightpanda = new IsolatedRenderer(
@@ -92,7 +92,7 @@ smoke("browser smoke", () => {
     async () => {
       const rendered = await render(lightpanda, { url: fixtureUrl });
       expect(rendered.renderer).toBe("lightpanda");
-      expect(rendered.title).toBe("Smokebrand fixture");
+      expect(rendered.title).toBe("Fixturebrand fixture");
       expect(rendered.html).toContain("Rendered by JavaScript");
 
       const captured = await render(lightpanda, { url: fixtureUrl, screenshot: true });
@@ -114,7 +114,7 @@ smoke("browser smoke", () => {
         branding: true,
       });
       expect(rendered.renderer).toBe("webview");
-      expect(rendered.title).toBe("Smokebrand fixture");
+      expect(rendered.title).toBe("Fixturebrand fixture");
       expect(rendered.html).toContain("Rendered by JavaScript");
 
       const metadata = await screenshotImage(rendered).metadata();
@@ -127,7 +127,7 @@ smoke("browser smoke", () => {
 
       expect(rendered.branding).toMatchObject({
         colorScheme: "light",
-        brandName: "Smokebrand",
+        brandName: "Fixturebrand",
         colors: {
           primary: "#C2410C",
           background: "#FFFFFF",
