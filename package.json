@@ -16,7 +16,6 @@
     "db:studio": "pnpm --filter @buncrawl/db db:studio",
     "db:generate": "pnpm --filter @buncrawl/db db:generate",
     "db:migrate": "pnpm --filter @buncrawl/db db:migrate",
-    "db:local": "pnpm --filter @buncrawl/db db:local",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",

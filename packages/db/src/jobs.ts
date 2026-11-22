@@ -529,24 +529,10 @@ function submissionItems(submission: JobSubmission): unknown[] {
 
 async function executeBatch(db: Database, statements: readonly unknown[]): Promise<void> {
   if (statements.length === 0) return;
-  const candidate = db as unknown as {
-    batch?: (statements: readonly unknown[]) => unknown;
-    $client?: {
-      transaction?: (action: () => void) => () => void;
-    };
-  };
-  if (candidate.batch) {
-    await candidate.batch(statements);
-    return;
-  }
-  if (candidate.$client?.transaction) {
-    const transaction = candidate.$client.transaction(() => {
-      for (const statement of statements) (statement as { run(): unknown }).run();
-    });
-    transaction();
-    return;
-  }
-  throw new Error("Database does not support atomic batches");
+  // bun:sqlite transactions are synchronous: every statement commits together or not at all.
+  db.$client.transaction(() => {
+    for (const statement of statements) (statement as { run(): unknown }).run();
+  })();
 }
 
 async function queryRows<T>(db: Database, query: unknown): Promise<T[]> {

@@ -4,9 +4,9 @@ import "varlock/auto-load";
 export default defineConfig({
   schema: "./src/schema/index.ts",
   out: "./src/migrations",
-  dialect: "turso",
+  // drizzle-kit opens the file with Bun's or Node's built-in SQLite driver.
+  dialect: "sqlite",
   dbCredentials: {
-    url: process.env.DATABASE_URL || "file:/data/buncrawl.db",
-    ...(process.env.DATABASE_AUTH_TOKEN ? { authToken: process.env.DATABASE_AUTH_TOKEN } : {}),
+    url: (process.env.DATABASE_URL || "file:/data/buncrawl.db").replace(/^file:/, ""),
   },
 });

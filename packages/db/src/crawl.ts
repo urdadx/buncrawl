@@ -120,7 +120,7 @@ export async function enqueueCrawlUrl(
       AND (SELECT count(*) FROM crawl_frontier WHERE job_id = ${jobId}) < ${limits.maxPages}
       AND (SELECT coalesce(sum(byte_size + reserved_bytes), 0) FROM crawl_frontier WHERE job_id = ${jobId}) < ${limits.maxBytes}
   `);
-  return Number("rowsAffected" in result ? result.rowsAffected : result.changes) > 0;
+  return result.changes > 0;
 }
 
 /** One UPDATE atomically checks the host slot and delay and fences the winning lease. */

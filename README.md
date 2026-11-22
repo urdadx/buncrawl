@@ -119,7 +119,7 @@ BUNCRAWL_API_KEY=change-me-to-16-plus-chars ./apps/server/server
 ```
 
 - Nothing is required. Data goes to a `data` folder in the working directory unless
-  `DATABASE_URL` (a `file:` path or a libSQL URL) and `BUNCRAWL_ARTIFACTS_PATH` say otherwise;
+  `DATABASE_URL` (a SQLite `file:` path) and `BUNCRAWL_ARTIFACTS_PATH` say otherwise;
   `CORS_ORIGIN` defaults to `*`; `PORT` to 3000. An invalid variable stops startup with its name.
 - Redis is optional (`REDIS_URL`): it only wakes job workers in other server processes sooner;
   workers poll the database without it.

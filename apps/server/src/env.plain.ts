@@ -21,7 +21,6 @@ export const plainEnvSchema = v.object({
   NODE_ENV: v.optional(v.picklist(["development", "production", "test"]), "production"),
   CORS_ORIGIN: v.optional(text, "*"),
   DATABASE_URL: v.optional(text, "file:data/buncrawl.db"),
-  DATABASE_AUTH_TOKEN: v.optional(text),
   BUNCRAWL_ARTIFACTS_PATH: v.optional(text, "data/artifacts"),
   BUNCRAWL_R2_ENDPOINT: v.optional(url),
   BUNCRAWL_R2_BUCKET: v.optional(text),

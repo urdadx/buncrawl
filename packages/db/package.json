@@ -8,7 +8,6 @@
   "scripts": {
     "check-types": "tsc --noEmit",
     "test": "bun test",
-    "db:local": "turso dev --db-file local.db",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:migrate:deploy": "drizzle-kit migrate",
@@ -17,7 +16,6 @@
   },
   "dependencies": {
     "@buncrawl/contracts": "workspace:*",
-    "@libsql/client": "0.18.0",
     "drizzle-orm": "1.0.0-rc.4",
     "valibot": "catalog:"
   },

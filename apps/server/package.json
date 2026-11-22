@@ -27,7 +27,6 @@
     "@buncrawl/scrape": "workspace:*",
     "@buncrawl/security": "workspace:*",
     "@trpc/server": "catalog:",
-    "libsql": "catalog:",
     "valibot": "catalog:",
     "varlock": "catalog:"
   },

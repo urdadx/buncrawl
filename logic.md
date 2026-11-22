@@ -86,7 +86,7 @@ buncrawl/
 │   ├── jobs/                             # Durable batch worker and artifact persistence
 │   ├── crawl/                            # Crawl URLs, robots, sitemaps, discovery
 │   ├── api/                              # Existing internal tRPC API
-│   ├── db/                               # Existing Drizzle/libSQL package
+│   ├── db/                               # Drizzle over Bun's built-in SQLite
 │   └── ui/
 │
 ├── bun-native-apis/                      # Local Bun API references
@@ -166,8 +166,9 @@ Detector classifies returned HTML
 - Scrape results are cached in SQLite only on request: a scrape is served from cache when the client sends `maxAge` (ms, up to 30 days) and a result at most that old exists; without `maxAge` it always scrapes fresh. Successful results are stored unless `storeInCache: false`. The cache key covers the URL and every option that changes the output; screenshot requests are never cached. Entries older than 30 days, and the oldest beyond 10,000 entries, are pruned hourly.
 - The `json` format is selector-based, not LLM-based: `{ type: "json", selectors }` maps field names to CSS selectors (first match's text), or to `{ selector, attribute?, all?, fields? }` for attributes, lists (capped at 1,000 matches) and nested records. It runs in the extraction worker on the absolutized full page, missing matches are null, and invalid CSS fails the request before fetching.
 - The current product target is self-hosted deployment; commercial multi-tenant infrastructure is deferred.
-- Drizzle with libSQL is the persistence layer: a local SQLite file is the default and Turso is an optional remote database.
-- SQLite/libSQL is authoritative for job state, results, cancellation, progress, and crawl-frontier state.
+- Drizzle over Bun's built-in SQLite (`bun:sqlite`) is the persistence layer: one local database
+  file. Remote databases (Turso/libSQL) are not supported; `DATABASE_URL` must be a `file:` URL.
+- SQLite is authoritative for job state, results, cancellation, progress, and crawl-frontier state.
 - Redis uses Bun's native client for dispatch, notifications, concurrency controls, and per-host rate limiting; Redis is not the authoritative job store.
 - Docker Compose provisions Redis and persistent local data volumes so the default self-hosted installation requires no external services.
 - Artifacts use Cloudflare R2 when fully configured and available, otherwise they use the local persistent artifact directory.
@@ -398,8 +399,10 @@ Build this work in dependency order. The first vertical slice is a durable `/v1/
     `scrapeRequestSchema`. Results go to stdout; browser worker timings and errors go to stderr
     (`BUNCRAWL_RENDERER_LOGS=stderr`). The entry point awaits the command: with a floating
     `import()` promise Bun exited mid-fetch with no output.
-- Use Drizzle schemas and migrations with the existing libSQL client.
-- Default to `file:/data/buncrawl.db`; allow a Turso/libSQL URL and auth token as optional configuration.
+- Use Drizzle schemas and migrations over `bun:sqlite`.
+- Default to `file:/data/buncrawl.db`. DONE: Turso/libSQL support removed (the remote client,
+  `DATABASE_AUTH_TOKEN`, `@libsql/client` and the unused `libsql` dependency); drizzle-kit uses
+  Bun's or Node's built-in SQLite driver.
 - Add an artifact-store interface shared by jobs and synchronous routes.
 - Implement an R2 backend with Bun's native S3 API.
 - Implement a filesystem backend rooted at `/data/artifacts` by default.
