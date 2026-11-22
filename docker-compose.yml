@@ -31,9 +31,6 @@ services:
     build:
       context: .
       dockerfile: apps/server/Dockerfile
-      secrets:
-        - web_env
-        - server_env
     init: true
     ports:
       - "3000:3000"

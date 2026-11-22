@@ -32,7 +32,19 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # The runtime image plus the renderer sources; reuses the layers built above.
+      - name: Build the smoke-test target
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/server/Dockerfile
+          target: smoke
+          platforms: linux/amd64
+          tags: buncrawl-server:ci-smoke
+          load: true
+          cache-from: type=gha
+
       # Real Lightpanda and Chrome renders of a local fixture, then /v1/capabilities from the
       # running server; nothing here reaches the public internet.
       - name: Smoke-test the image
-        run: apps/server/scripts/smoke-image.sh buncrawl-server:ci
+        run: apps/server/scripts/smoke-image.sh buncrawl-server:ci buncrawl-server:ci-smoke

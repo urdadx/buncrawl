@@ -8,7 +8,7 @@ buncrawl/
 ├── apps/
 │   ├── server/
 │   │   ├── Dockerfile                    # DONE: pinned Bun, Chrome for Testing, Lightpanda, fonts
-│   │   ├── scripts/smoke-image.sh        # DONE: offline smoke checks against a built image
+│   │   ├── scripts/smoke-image.sh        # DONE: offline smoke checks against a built image and its smoke target
 │   │   └── src/
 │   │       ├── index.ts                  # Bun.serve entry point
 │   │       ├── executable.ts             # DONE: `pnpm compile` entry; server or browser worker
@@ -334,9 +334,15 @@ Decisions:
   so a local HTTP fixture server cannot be rendered, and `data:` URLs keep the tests offline.
   Lightpanda's server mode now reports status 200 for `data:` documents, as `lightpanda fetch`
   does.
-- `apps/server/scripts/smoke-image.sh <image>` runs the smoke tests inside the image, then starts
-  the server and requires `/v1/capabilities` to report both renderers with every feature.
-  `.github/workflows/server-image.yml` builds the image with the GitHub Actions cache and runs
+- The image runs the single-file binary (`pnpm --filter server compile`, see 12.1) instead of the
+  workspace and its `node_modules`. The builder fetches every locked package from
+  `pnpm-lock.yaml` alone into a store layer, so a source change only re-links the server's
+  production dependencies offline and recompiles. The server build needs no `.env` secrets.
+- The Dockerfile's `smoke` target is the runtime image plus the renderer sources and their
+  production dependencies. `apps/server/scripts/smoke-image.sh <image> <smoke-image>` runs the
+  smoke tests in the `smoke` image, then starts the deployable image and requires
+  `/v1/capabilities` to report both renderers with every feature.
+  `.github/workflows/server-image.yml` builds both targets with the GitHub Actions cache and runs
   that script on every push to `main` and every pull request.
 
 ### 12. Durable Jobs, Batch, Map, and Crawl
