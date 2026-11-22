@@ -127,13 +127,16 @@ BUNCRAWL_API_KEY=change-me-to-16-plus-chars ./apps/server/server
 - Recommended: `BUNCRAWL_API_KEY`, the Bearer key clients must send (see Docker Compose above).
 - Optional: every other variable in `apps/server/.env.schema` (R2, `BUNCRAWL_PROXY_URL`,
   `BUNCRAWL_WEBHOOK_SECRET`, and the browser settings below).
-- Browser rendering uses the host's browsers: Lightpanda from `BUNCRAWL_LIGHTPANDA_PATH` or
-  `lightpanda` on `PATH`, and Chrome or Chromium from `BUN_CHROME_PATH` or `PATH`. Set
+- Browser rendering uses the host's browsers, found on `PATH` or in their usual install folders:
+  Chrome, Chromium, Brave or Edge in `/Applications` (macOS), `/usr/bin`, `/opt/google/chrome` or
+  `/snap/bin` (Linux), Program Files (Windows), or Playwright's browser cache; Lightpanda in
+  `~/.local/bin`, `/usr/local/bin`, `/opt/homebrew/bin` or `/usr/bin`. `BUN_CHROME_PATH` and
+  `BUNCRAWL_LIGHTPANDA_PATH` pick one explicitly. Set
   `BUNCRAWL_CHROME_NO_SANDBOX=1` where Chrome's sandbox cannot start. `GET /v1/capabilities`
   reports what the startup check found; without browsers the binary still scrapes over HTTP.
 - The binary targets the OS and CPU it was built on; cross-compile with Bun's `--target`.
-- Unlike the varlock setup used by `pnpm run dev` and the Docker image, the binary does not
-  redact secrets from its console output.
+- Unlike the varlock setup used by `pnpm run dev`, the binary (and so the Docker image, which
+  runs it) does not redact secrets from its console output.
 
 #### Command line
 

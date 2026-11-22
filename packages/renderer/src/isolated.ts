@@ -1,5 +1,6 @@
 import { errorCodeOf } from "@buncrawl/core";
 
+import type { BrowserLocations } from "./browser-paths";
 import type { BrowserRendererName, RendererCapabilityReport } from "./capabilities";
 import { RendererChain } from "./chain";
 import {
@@ -8,7 +9,12 @@ import {
   type LightpandaRendererOptions,
 } from "./lightpanda";
 import type { RenderRequest, Renderer, RendererCapabilities, RenderResult } from "./renderer";
-import { chromeLaunchArgs, WebViewRenderer, type WebViewRendererOptions } from "./webview";
+import {
+  chromeLaunchArgs,
+  resolveChromeExecutable,
+  WebViewRenderer,
+  type WebViewRendererOptions,
+} from "./webview";
 
 const DEFAULT_MAX_WORKERS = 2;
 const DEFAULT_MAX_QUEUE = 32;
@@ -234,14 +240,21 @@ export class IsolatedRenderer implements Renderer {
 }
 
 /** Worker configurations for the installed browsers, as `createIsolatedDefaultRenderer` uses them. */
-export function isolatedRendererConfigs(env: Record<string, string | undefined> = process.env): {
+export function isolatedRendererConfigs(
+  env: Record<string, string | undefined> = process.env,
+  locations?: BrowserLocations,
+): {
   lightpanda?: IsolatedRendererConfig;
   webview: IsolatedRendererConfig;
 } {
   const proxyUrl = env.BUNCRAWL_PROXY_URL;
-  const executable = resolveLightpandaExecutable(env);
+  const executable = resolveLightpandaExecutable(env, locations?.lightpanda);
+  // Passed explicitly: Bun.WebView itself only looks at BUN_CHROME_PATH and PATH, so a browser
+  // found in a common install location (e.g. a macOS app bundle) would not launch otherwise.
+  const chromePath = resolveChromeExecutable(env, locations?.chrome);
   const argv = chromeLaunchArgs(env);
   const chrome = {
+    ...(chromePath ? { path: chromePath } : {}),
     ...(proxyUrl ? { proxyUrl } : {}),
     ...(argv.length > 0 ? { argv } : {}),
   };

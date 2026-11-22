@@ -1,6 +1,7 @@
 import { errorCodeOf } from "@buncrawl/core";
 
 import { BRANDING_SCRIPT, buildBrandingProfile } from "./branding";
+import { defaultBrowserLocations, firstExecutable } from "./browser-paths";
 import {
   installBrowserNetworkGuard,
   type BrowserNetworkGuard,
@@ -668,11 +669,13 @@ function hasChromeExecutable(path: string | undefined): boolean {
 }
 
 /**
- * The Chrome executable Bun.WebView launches: `BUN_CHROME_PATH`, else the first Chrome-family
- * browser on `PATH`, searched in Bun's order. Returns null when none is an executable.
+ * The Chrome executable to launch: `BUN_CHROME_PATH` (and nothing else when it is set), else the
+ * first Chrome-family browser on `PATH`, else the first of the common install locations
+ * (`browser-paths.ts`). Returns null when none is an executable.
  */
 export function resolveChromeExecutable(
   env: Record<string, string | undefined> = process.env,
+  locations?: readonly string[],
 ): string | null {
   if (env.BUN_CHROME_PATH) return Bun.which(env.BUN_CHROME_PATH);
   const candidates =
@@ -691,7 +694,9 @@ export function resolveChromeExecutable(
     const path = Bun.which(candidate, env.PATH === undefined ? {} : { PATH: env.PATH });
     if (path) return path;
   }
-  return null;
+  return firstExecutable(
+    locations ?? defaultBrowserLocations(process.platform, undefined, env).chrome,
+  );
 }
 
 function buildLaunchBackend(

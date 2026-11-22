@@ -127,6 +127,12 @@ describe("batchBody", () => {
     });
   });
 
+  test("adds https:// to lines without a scheme", () => {
+    expect(batchBody("site.example/a\nhttp://site.example/b\n", {})).toEqual({
+      body: { requests: [{ url: `${origin}/a` }, { url: "http://site.example/b" }] },
+    });
+  });
+
   test("rejects an empty list and invalid URLs", () => {
     expect(batchBody("# nothing\n", {})).toMatchObject({
       error: expect.stringContaining("No URLs"),

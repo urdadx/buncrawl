@@ -5,18 +5,27 @@ import {
   LightpandaServerUnavailableError,
 } from "./lightpanda-server";
 import type { RenderRequest, Renderer, RendererCapabilities, RenderResult } from "./renderer";
+import { defaultBrowserLocations, firstExecutable } from "./browser-paths";
 
 const DEFAULT_WAIT_MS = 2000;
 
 /**
- * The Lightpanda executable to launch: `BUNCRAWL_LIGHTPANDA_PATH`, else `lightpanda` on `PATH`.
- * Returns the resolved path, or null when it is not an executable.
+ * The Lightpanda executable to launch: `BUNCRAWL_LIGHTPANDA_PATH` (and nothing else when it is
+ * set), else `lightpanda` on `PATH`, else the first of the common install locations
+ * (`browser-paths.ts`). Returns the resolved path, or null when none is an executable.
  */
 export function resolveLightpandaExecutable(
   env: Record<string, string | undefined> = process.env,
+  locations?: readonly string[],
 ): string | null {
-  const executable = env.BUNCRAWL_LIGHTPANDA_PATH || "lightpanda";
-  return Bun.which(executable, env.PATH === undefined ? {} : { PATH: env.PATH });
+  const path = env.PATH === undefined ? {} : { PATH: env.PATH };
+  if (env.BUNCRAWL_LIGHTPANDA_PATH) return Bun.which(env.BUNCRAWL_LIGHTPANDA_PATH, path);
+  return (
+    Bun.which("lightpanda", path) ??
+    firstExecutable(
+      locations ?? defaultBrowserLocations(process.platform, undefined, env).lightpanda,
+    )
+  );
 }
 
 interface LightpandaOutput {

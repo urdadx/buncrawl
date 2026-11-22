@@ -1,3 +1,4 @@
+import type { BrowserLocations } from "./browser-paths";
 import { LightpandaRenderer, resolveLightpandaExecutable } from "./lightpanda";
 import type { Renderer, RendererCapabilities } from "./renderer";
 import { chromeLaunchArgs, resolveChromeExecutable, WebViewRenderer } from "./webview";
@@ -32,6 +33,8 @@ export type CheckCommand = (args: string[]) => Promise<string>;
 export interface RendererCapabilityCheckOptions {
   env?: Record<string, string | undefined>;
   run?: CheckCommand;
+  /** Where to look for browsers that are not on PATH; defaults to the common install locations. */
+  locations?: BrowserLocations;
 }
 
 /**
@@ -46,8 +49,8 @@ export async function checkRendererCapabilities(
   const env = options.env ?? process.env;
   const run = options.run ?? runCommand;
 
-  const lightpandaPath = resolveLightpandaExecutable(env);
-  const chromePath = resolveChromeExecutable(env);
+  const lightpandaPath = resolveLightpandaExecutable(env, options.locations?.lightpanda);
+  const chromePath = resolveChromeExecutable(env, options.locations?.chrome);
   const renderers = await Promise.all([
     checkBackend({
       name: "lightpanda",

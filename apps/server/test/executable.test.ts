@@ -88,7 +88,7 @@ describe("compiled executable", () => {
       env: { PATH: "" },
     });
     expect(usage.exitCode).toBe(2);
-    expect(usage.stderr.toString()).toContain("URL must be valid");
+    expect(usage.stderr.toString()).toContain("Not a URL: not-a-url");
     expect(usage.stdout.toString()).toBe("");
 
     const crawl = Bun.spawnSync([executable, "crawl"], { cwd: dir, env: { PATH: "" } });

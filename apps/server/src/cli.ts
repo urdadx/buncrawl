@@ -14,7 +14,7 @@ import type { JobCommand, JobProgress } from "./cli-jobs";
 const USAGE = `Usage:
   buncrawl [serve]                 Start the API server (configured by environment variables)
   buncrawl scrape <url> [opts]     Scrape one page and print it
-  buncrawl <url> [opts]            Same as scrape
+  buncrawl <url> [opts]            Same as scrape; https:// is added when no scheme is given
   buncrawl map <url> [opts]        Discover a site's URLs and print one per line
   buncrawl crawl <url> [opts]      Scrape a site by following links; JSON Lines, or --out
   buncrawl batch <file|-> [opts]   Scrape the URLs in a file (one per line, - for stdin)
@@ -50,8 +50,8 @@ Other options:
   -v, --version            Print the version
 
 Results go to stdout and progress to stderr. Failures exit 1, usage errors 2, Ctrl-C 130 after
-printing what finished. Browser rendering uses Chrome (BUN_CHROME_PATH or PATH) and Lightpanda
-(BUNCRAWL_LIGHTPANDA_PATH or PATH) when present.`;
+printing what finished. Browser rendering uses Chrome and Lightpanda when installed: found on PATH
+or in their usual install folders, or set with BUN_CHROME_PATH and BUNCRAWL_LIGHTPANDA_PATH.`;
 
 // Replaced by `--define BUNCRAWL_VERSION=...` in release builds (scripts/build-release.sh).
 declare const BUNCRAWL_VERSION: string | undefined;
@@ -99,7 +99,7 @@ export function parseCli(args: string[]): CliCommand {
     return { kind: "help", exitCode: 0 };
   if (first === "-v" || first === "--version" || first === "version") return { kind: "version" };
   if (first === "map" || first === "crawl" || first === "batch") return parseJob(first, rest);
-  const scrapeArgs = first === "scrape" ? rest : /^https?:\/\//i.test(first) ? args : undefined;
+  const scrapeArgs = first === "scrape" ? rest : looksLikeUrl(first) ? args : undefined;
   if (!scrapeArgs) return usageError(`Unknown command: ${first}`);
   return parseScrape(scrapeArgs);
 }
@@ -121,7 +121,9 @@ function parseScrape(args: string[]): CliCommand {
 
   const page = pageOptions(values, screenshotPath !== undefined);
   if (typeof page === "string") return usageError(page);
-  const input: Record<string, unknown> = { url: positionals[0], ...page };
+  const url = urlArgument(positionals[0]!);
+  if (!url) return usageError(`Not a URL: ${positionals[0]}`);
+  const input: Record<string, unknown> = { url, ...page };
   const timeout = milliseconds(values.timeout as string | undefined, "timeout");
   if (typeof timeout === "string") return usageError(timeout);
   if (timeout !== undefined) input.timeout = timeout;
@@ -200,7 +202,9 @@ function parseJob(command: JobCommand, args: string[]): CliCommand {
     return { ...job, body: {}, pageOptions: page, source: positionals[0]! };
   }
 
-  const body: Record<string, unknown> = { url: positionals[0] };
+  const url = urlArgument(positionals[0]!);
+  if (!url) return usageError(`Not a URL: ${positionals[0]}`);
+  const body: Record<string, unknown> = { url };
   const limitField = command === "map" ? "maxUrls" : "maxPages";
   for (const [option, field] of [
     ["limit", limitField],
@@ -230,7 +234,9 @@ export function batchBody(
     .map((line) => line.trim())
     .filter((line) => line !== "" && !line.startsWith("#"));
   if (urls.length === 0) return { error: "No URLs to scrape (one per line; # starts a comment)" };
-  const body = { requests: urls.map((url) => ({ url, ...pageOptions })) };
+  const invalid = urls.find((url) => !urlArgument(url));
+  if (invalid) return { error: `Not a URL: ${invalid}` };
+  const body = { requests: urls.map((url) => ({ url: urlArgument(url)!, ...pageOptions })) };
   const problem = validateJob("batch", body);
   return problem ? { error: problem } : { body };
 }
@@ -447,6 +453,39 @@ async function readFile(path: string): Promise<string | undefined> {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Adds `https://` to a URL typed without a scheme (`example.com/docs`). There is no fallback to
+ * http: a page served only over plain HTTP needs an explicit `http://`.
+ */
+export function withScheme(input: string): string {
+  if (/^[a-z][a-z\d+.-]*:\/\//i.test(input)) return input;
+  return `https://${input.replace(/^\/\//, "")}`;
+}
+
+/**
+ * A URL argument with its scheme: kept as typed when it has one (the request schema then rejects
+ * anything but http and https), else `https://` plus a bare domain, which must contain a dot.
+ * Undefined when a scheme-less argument is not a domain, e.g. a mistyped command.
+ */
+export function urlArgument(input: string): string | undefined {
+  if (/^[a-z][a-z\d+.-]*:\/\//i.test(input)) return input;
+  if (input.startsWith("-") || /\s/.test(input)) return undefined;
+  const url = withScheme(input);
+  try {
+    return new URL(url).hostname.includes(".") ? url : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** A first argument that is a URL rather than a command. */
+function looksLikeUrl(input: string): boolean {
+  return (
+    /^https?:\/\//i.test(input) ||
+    (!/^[a-z][a-z\d+.-]*:\/\//i.test(input) && urlArgument(input) !== undefined)
+  );
 }
 
 function usageError(message: string): CliCommand {

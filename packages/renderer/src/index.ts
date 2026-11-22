@@ -1,4 +1,5 @@
 export * from "./branding";
+export * from "./browser-paths";
 export * from "./browser-safety";
 export * from "./capabilities";
 export * from "./chain";

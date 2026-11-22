@@ -1,8 +1,9 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { chmod, mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { defaultBrowserLocations } from "../src/browser-paths";
 import { checkRendererCapabilities } from "../src/capabilities";
 import { isolatedRendererConfigs } from "../src/isolated";
 import { resolveLightpandaExecutable } from "../src/lightpanda";
@@ -123,6 +124,7 @@ describe("checkRendererCapabilities", () => {
     const report = await checkRendererCapabilities({
       env: { PATH: join(bin, "empty"), BUN_CHROME_PATH: join(bin, "no-such-chrome") },
       run: () => Promise.reject(new Error("must not run")),
+      locations: { chrome: [], lightpanda: [] },
     });
 
     expect(
@@ -143,13 +145,15 @@ describe("checkRendererCapabilities", () => {
   });
 });
 
+const noLocations = { chrome: [], lightpanda: [] };
+
 describe("browser configuration from the environment", () => {
   test("BUNCRAWL_LIGHTPANDA_PATH overrides the PATH lookup", () => {
     expect(resolveLightpandaExecutable({ PATH: bin })).toBe(lightpanda);
     expect(resolveLightpandaExecutable({ PATH: "", BUNCRAWL_LIGHTPANDA_PATH: lightpanda })).toBe(
       lightpanda,
     );
-    expect(resolveLightpandaExecutable({ PATH: "" })).toBeNull();
+    expect(resolveLightpandaExecutable({ PATH: "" }, [])).toBeNull();
   });
 
   test("BUN_CHROME_PATH must name an executable", () => {
@@ -157,17 +161,20 @@ describe("browser configuration from the environment", () => {
     expect(
       resolveChromeExecutable({ PATH: bin, BUN_CHROME_PATH: join(bin, "missing") }),
     ).toBeNull();
-    expect(resolveChromeExecutable({ PATH: "" })).toBeNull();
+    expect(resolveChromeExecutable({ PATH: "" }, [])).toBeNull();
   });
 
   test("workers get the Lightpanda path and the Chrome sandbox opt-out", () => {
     expect(
-      isolatedRendererConfigs({
-        PATH: "",
-        BUNCRAWL_LIGHTPANDA_PATH: lightpanda,
-        BUNCRAWL_CHROME_NO_SANDBOX: "1",
-        BUNCRAWL_PROXY_URL: "http://proxy.example:8080",
-      }),
+      isolatedRendererConfigs(
+        {
+          PATH: "",
+          BUNCRAWL_LIGHTPANDA_PATH: lightpanda,
+          BUNCRAWL_CHROME_NO_SANDBOX: "1",
+          BUNCRAWL_PROXY_URL: "http://proxy.example:8080",
+        },
+        noLocations,
+      ),
     ).toEqual({
       lightpanda: {
         type: "lightpanda",
@@ -181,8 +188,73 @@ describe("browser configuration from the environment", () => {
         },
       },
     });
-    expect(isolatedRendererConfigs({ PATH: "", BUNCRAWL_CHROME_NO_SANDBOX: "0" })).toEqual({
+    expect(
+      isolatedRendererConfigs({ PATH: "", BUNCRAWL_CHROME_NO_SANDBOX: "0" }, noLocations),
+    ).toEqual({
       webview: { type: "webview", options: { backend: "chrome" } },
     });
+  });
+});
+
+describe("common browser install locations", () => {
+  const missing = join(bin, "not-installed");
+
+  test("are searched after PATH, in order, skipping ones that are not there", () => {
+    expect(resolveLightpandaExecutable({ PATH: "" }, [missing, lightpanda])).toBe(lightpanda);
+    expect(resolveChromeExecutable({ PATH: "" }, [missing, chrome])).toBe(chrome);
+    expect(resolveLightpandaExecutable({ PATH: "" }, [missing])).toBeNull();
+  });
+
+  test("are not searched when the environment names the browser", () => {
+    expect(resolveChromeExecutable({ PATH: "", BUN_CHROME_PATH: missing }, [chrome])).toBeNull();
+    expect(
+      resolveLightpandaExecutable({ PATH: "", BUNCRAWL_LIGHTPANDA_PATH: missing }, [lightpanda]),
+    ).toBeNull();
+  });
+
+  test("give workers the Chrome path, since Bun.WebView only searches PATH", () => {
+    expect(isolatedRendererConfigs({ PATH: "" }, { chrome: [chrome], lightpanda: [] })).toEqual({
+      webview: { type: "webview", options: { backend: "chrome", chrome: { path: chrome } } },
+    });
+  });
+
+  test("cover each OS and prefer the newest Playwright build", async () => {
+    const home = await mkdtemp(join(tmpdir(), "buncrawl-home-"));
+    for (const build of ["1200", "1254"]) {
+      const dir = join(
+        home,
+        ".cache/ms-playwright",
+        `chromium_headless_shell-${build}`,
+        "chrome-headless-shell-linux64",
+      );
+      await mkdir(dir, { recursive: true });
+      await Bun.write(join(dir, "chrome-headless-shell"), "");
+    }
+    const linux = defaultBrowserLocations("linux", home, {});
+    expect(linux.chrome).toContain("/usr/bin/google-chrome-stable");
+    expect(linux.chrome.filter((path) => path.startsWith(home))).toEqual([
+      join(
+        home,
+        ".cache/ms-playwright/chromium_headless_shell-1254/chrome-headless-shell-linux64/chrome-headless-shell",
+      ),
+      join(
+        home,
+        ".cache/ms-playwright/chromium_headless_shell-1200/chrome-headless-shell-linux64/chrome-headless-shell",
+      ),
+    ]);
+    expect(linux.lightpanda).toEqual([
+      join(home, ".local/bin/lightpanda"),
+      "/usr/local/bin/lightpanda",
+      "/opt/homebrew/bin/lightpanda",
+      "/usr/bin/lightpanda",
+    ]);
+
+    const mac = defaultBrowserLocations("darwin", home, {});
+    expect(mac.chrome[0]).toBe("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome");
+    expect(mac.chrome).toContain(join(home, "Applications/Chromium.app/Contents/MacOS/Chromium"));
+
+    const windows = defaultBrowserLocations("win32", home, { PROGRAMFILES: "C:\\Program Files" });
+    expect(windows.chrome).toContain("C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe");
+    expect(windows.lightpanda).toEqual([]);
   });
 });

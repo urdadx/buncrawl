@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ScrapeResponse } from "@buncrawl/contracts";
 
-import { formatOutput, parseCli, type CliCommand } from "../src/cli";
+import { formatOutput, parseCli, urlArgument, withScheme, type CliCommand } from "../src/cli";
 
 describe("parseCli", () => {
   test("serves by default and with `serve`", () => {
@@ -68,6 +68,39 @@ describe("parseCli", () => {
     }
     expect(parseCli(["--help"])).toEqual({ kind: "help", exitCode: 0 });
     expect(parseCli(["--version"])).toEqual({ kind: "version" });
+  });
+});
+
+describe("URLs without a scheme", () => {
+  test("get https:// added, as the first word or after a command", () => {
+    expect(parseCli(["pearsuite.io"])).toMatchObject({
+      kind: "scrape",
+      request: { url: "https://pearsuite.io" },
+    });
+    expect(parseCli(["scrape", "pearsuite.io/docs?a=1"])).toMatchObject({
+      request: { url: "https://pearsuite.io/docs?a=1" },
+    });
+    expect(parseCli(["crawl", "pearsuite.io"])).toMatchObject({
+      body: { url: "https://pearsuite.io" },
+    });
+    expect(parseCli(["map", "//pearsuite.io"])).toMatchObject({
+      body: { url: "https://pearsuite.io" },
+    });
+  });
+
+  test("keep an explicit scheme, including http://", () => {
+    expect(withScheme("http://pearsuite.io")).toBe("http://pearsuite.io");
+    expect(urlArgument("HTTPS://pearsuite.io")).toBe("HTTPS://pearsuite.io");
+  });
+
+  test("must otherwise look like a domain", () => {
+    expect(parseCli(["urls"])).toMatchObject({ kind: "help", exitCode: 2 });
+    expect(parseCli(["scrape", "not-a-url"])).toMatchObject({
+      kind: "help",
+      exitCode: 2,
+      message: "Not a URL: not-a-url",
+    });
+    expect(urlArgument("--render")).toBeUndefined();
   });
 });
 
