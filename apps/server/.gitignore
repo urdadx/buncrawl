@@ -1,5 +1,8 @@
 # prod
 dist/
+# `pnpm compile` output
+/server
+/*.map
 /build
 /out/
 

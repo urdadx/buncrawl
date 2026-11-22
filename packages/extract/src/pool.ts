@@ -193,8 +193,24 @@ function runInline(job: ExtractJob): Promise<ExtractJobOutput> {
 }
 
 function createBunWorker(): ExtractWorkerLike {
-  const file = import.meta.url.endsWith(".ts") ? "extract-worker.ts" : "extract-worker.mjs";
-  return new Worker(new URL(file, import.meta.url).href) as unknown as ExtractWorkerLike;
+  return new Worker(extractWorkerUrl()) as unknown as ExtractWorkerLike;
+}
+
+/**
+ * The worker sits next to this module: the source file, or extract-worker.mjs beside a bundle. A
+ * single-file executable (`bun build --compile`) embeds it as an extra entry point beside its main
+ * module under /$bunfs/ (B:/~BUN/ on Windows); there import.meta.url still names the source file
+ * on the build machine, so the worker is resolved against the executable's main module instead.
+ */
+export function extractWorkerUrl(
+  main: string = Bun.main,
+  moduleUrl: string = import.meta.url,
+): string {
+  if (main.startsWith("/$bunfs/") || /^[A-Z]:[\\/]~BUN[\\/]/i.test(main)) {
+    return new URL("extract-worker.js", Bun.pathToFileURL(main)).href;
+  }
+  const file = moduleUrl.endsWith(".ts") ? "extract-worker.ts" : "extract-worker.mjs";
+  return new URL(file, moduleUrl).href;
 }
 
 function defaultPoolSize(): number {

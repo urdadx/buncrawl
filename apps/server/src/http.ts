@@ -1,6 +1,6 @@
 import type { BunRequest } from "bun";
 
-import { ENV } from "./env.server";
+import { ENV } from "#env";
 
 export const corsHeaders = {
   "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",

@@ -3,7 +3,7 @@ import { createArtifactRecord, createDb, migrateDb } from "@buncrawl/db";
 import type { ScrapeDocument } from "@buncrawl/contracts";
 import { persistDocumentArtifacts } from "@buncrawl/jobs";
 
-import { ENV } from "./env.server";
+import { ENV } from "#env";
 
 export const db = createDb(ENV);
 

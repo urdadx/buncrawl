@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 import {
   IsolatedRenderer,
   IsolatedRendererError,
+  rendererWorkerCommand,
   type RendererWorker,
   type WorkerRenderRequest,
   type WorkerRenderResult,
@@ -223,5 +224,24 @@ describe("IsolatedRenderer", () => {
     await expect(pending).rejects.toThrow("request cancelled");
     expect(workers[0]?.closed).toBe(true);
     renderer.close();
+  });
+});
+
+describe("rendererWorkerCommand", () => {
+  test("runs the worker script next to the source module or the bundle", () => {
+    expect(
+      rendererWorkerCommand("/app/src/index.ts", "file:///app/packages/renderer/src/isolated.ts"),
+    ).toEqual([process.execPath, "/app/packages/renderer/src/renderer-worker.ts"]);
+    expect(rendererWorkerCommand("/app/dist/index.mjs", "file:///app/dist/index.mjs")).toEqual([
+      process.execPath,
+      "/app/dist/renderer-worker.mjs",
+    ]);
+  });
+
+  test("re-runs a compiled executable without a script argument", () => {
+    // import.meta.url still names the source file on the build machine inside an executable.
+    const source = "file:///build/packages/renderer/src/isolated.ts";
+    expect(rendererWorkerCommand("/$bunfs/root/server", source)).toEqual([process.execPath]);
+    expect(rendererWorkerCommand("B:/~BUN/root/server.exe", source)).toEqual([process.execPath]);
   });
 });

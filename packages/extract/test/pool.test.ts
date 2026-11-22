@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
 import { runExtractJob, type ExtractJob } from "../src/job";
-import { ExtractionError, ExtractionPool, type ExtractWorkerLike } from "../src/pool";
+import {
+  ExtractionError,
+  ExtractionPool,
+  extractWorkerUrl,
+  type ExtractWorkerLike,
+} from "../src/pool";
 
 const job = (html = "<main><h1>Title</h1><p>Body text.</p></main>"): ExtractJob => ({
   html,
@@ -178,5 +183,23 @@ describe("ExtractionPool scheduling and failures", () => {
       },
     });
     expect((await throwing.run(job())).extracted.markdown).toContain("Title");
+  });
+});
+
+describe("extractWorkerUrl", () => {
+  test("resolves the worker next to the source module or the bundle", () => {
+    expect(extractWorkerUrl("/app/src/index.ts", "file:///app/packages/extract/src/pool.ts")).toBe(
+      "file:///app/packages/extract/src/extract-worker.ts",
+    );
+    expect(extractWorkerUrl("/app/dist/index.mjs", "file:///app/dist/index.mjs")).toBe(
+      "file:///app/dist/extract-worker.mjs",
+    );
+  });
+
+  test("resolves the entry point embedded beside a compiled executable's main module", () => {
+    // import.meta.url still names the source file on the build machine inside an executable.
+    expect(
+      extractWorkerUrl("/$bunfs/root/server", "file:///build/packages/extract/src/pool.ts"),
+    ).toBe("file:///$bunfs/root/extract-worker.js");
   });
 });

@@ -1,7 +1,7 @@
 import { createScrapeCache, type Database } from "@buncrawl/db";
 import { scrape } from "@buncrawl/scrape";
 
-import { ENV } from "../env.server";
+import { ENV } from "#env";
 import { endpoint } from "../http";
 import { createBatchScrapeHandler } from "./v1/batch-scrape";
 import { createDiscoveryHandler } from "./v1/discovery";

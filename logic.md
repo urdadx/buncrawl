@@ -11,6 +11,9 @@ buncrawl/
 │   │   ├── scripts/smoke-image.sh        # DONE: offline smoke checks against a built image
 │   │   └── src/
 │   │       ├── index.ts                  # Bun.serve entry point
+│   │       ├── executable.ts             # DONE: `pnpm compile` entry; server or browser worker
+│   │       ├── env.server.ts             # Environment from .env.schema through varlock
+│   │       ├── env.plain.ts              # DONE: the same variables from plain env, for the binary
 │   │       └── routes/
 │   │           ├── capabilities.ts       # DONE: GET /v1/capabilities
 │   │           ├── v1/
@@ -337,7 +340,22 @@ Build this work in dependency order. The first vertical slice is a durable `/v1/
 
 #### 12.1 Runtime and Storage Boundaries
 
-- Keep the self-hosted server compatible with `bun build --compile`.
+- Keep the self-hosted server compatible with `bun build --compile`. DONE: `pnpm --filter server compile`
+  builds `apps/server/server`, which runs from any folder with plain environment variables and
+  renders with Lightpanda and Chrome:
+  - An executable runs only its embedded entry point, whatever its arguments. The renderer pool
+    therefore re-runs the executable itself, and `src/executable.ts` loads the browser worker
+    instead of the server when `BUNCRAWL_RENDERER_CONFIG` is set.
+  - `src/extract-worker.ts` is a second compile entry point, embedded beside the main module under
+    `/$bunfs/root/`. Inside an executable `import.meta.url` still names the source file on the
+    build machine, so both pools detect the executable from `Bun.main` instead.
+  - The `buncrawl-executable` build condition maps `#env` to `src/env.plain.ts`, which validates
+    the `.env.schema` variables from `process.env` with valibot. varlock resolves the schema through
+    its CLI, which a lone binary has neither. The binary requires `DATABASE_URL` and
+    `BUNCRAWL_ARTIFACTS_PATH` instead of using the schema's development paths, and does not redact
+    secrets from console output as varlock does. A test keeps the two variable lists in step.
+  - `--format=esm` keeps top-level await (the renderer worker uses it) working with `--bytecode`.
+  - `apps/server/test/executable.test.ts` compiles the binary and checks both entry modes.
 - Use Drizzle schemas and migrations with the existing libSQL client.
 - Default to `file:/data/buncrawl.db`; allow a Turso/libSQL URL and auth token as optional configuration.
 - Add an artifact-store interface shared by jobs and synchronous routes.

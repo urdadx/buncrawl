@@ -67,6 +67,33 @@ Environment variables are read from each app's `.env` file (baked into web build
 Docker Compose persists SQLite at `./.data/buncrawl.db` and artifacts under
 `./.data/artifacts`. The server applies its required storage schema during startup.
 
+### Single-file binary
+
+`pnpm --filter server compile` builds `apps/server/server`, one executable with the Bun runtime,
+the server, and its browser and extraction workers. It needs no `node_modules`, `.env`, or
+`.env.schema` beside it: configure it with plain environment variables.
+
+```bash
+pnpm --filter server compile
+```
+
+```bash
+PORT=3000 CORS_ORIGIN=http://localhost:3001 DATABASE_URL=file:/var/lib/buncrawl/buncrawl.db BUNCRAWL_ARTIFACTS_PATH=/var/lib/buncrawl/artifacts ./apps/server/server
+```
+
+- Required: `CORS_ORIGIN`, `DATABASE_URL` (a `file:` path or a libSQL URL), and
+  `BUNCRAWL_ARTIFACTS_PATH`. The binary does not fall back to the development paths in
+  `apps/server/.env.schema`; it exits and names any missing or invalid variable.
+- Optional: every other variable in `apps/server/.env.schema` (R2, `BUNCRAWL_PROXY_URL`,
+  `BUNCRAWL_WEBHOOK_SECRET`, and the browser settings below).
+- Browser rendering uses the host's browsers: Lightpanda from `BUNCRAWL_LIGHTPANDA_PATH` or
+  `lightpanda` on `PATH`, and Chrome or Chromium from `BUN_CHROME_PATH` or `PATH`. Set
+  `BUNCRAWL_CHROME_NO_SANDBOX=1` where Chrome's sandbox cannot start. `GET /v1/capabilities`
+  reports what the startup check found; without browsers the binary still scrapes over HTTP.
+- The binary targets the OS and CPU it was built on; cross-compile with Bun's `--target`.
+- Unlike the varlock setup used by `pnpm run dev` and the Docker image, the binary does not
+  redact secrets from its console output.
+
 ## Project Structure
 
 ```

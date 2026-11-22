@@ -316,10 +316,7 @@ class BunRendererWorker implements RendererWorker {
   private closed = false;
 
   constructor(config: IsolatedRendererConfig) {
-    const workerFile = import.meta.url.endsWith(".ts")
-      ? "renderer-worker.ts"
-      : "renderer-worker.mjs";
-    this.process = Bun.spawn([process.execPath, new URL(workerFile, import.meta.url).pathname], {
+    this.process = Bun.spawn(rendererWorkerCommand(), {
       ipc: (message) => this.onMessage(message),
       env: { ...process.env, BUNCRAWL_RENDERER_CONFIG: JSON.stringify(config) },
       // Renderer phase timings are emitted by the worker and must remain
@@ -403,6 +400,26 @@ class BunRendererWorker implements RendererWorker {
     }
     pending.resolve({ result: message.result, rssBytes: message.rssBytes });
   }
+}
+
+/**
+ * A single-file executable (`bun build --compile`) runs only its embedded entry point, so it is
+ * re-run without a script argument and its entry point (apps/server/src/executable.ts) becomes a
+ * browser worker because BUNCRAWL_RENDERER_CONFIG is set. Otherwise Bun runs the worker script
+ * that sits next to this module: the source file, or renderer-worker.mjs beside a bundle.
+ */
+export function rendererWorkerCommand(
+  main: string = Bun.main,
+  moduleUrl: string = import.meta.url,
+): string[] {
+  if (isCompiledExecutable(main)) return [process.execPath];
+  const workerFile = moduleUrl.endsWith(".ts") ? "renderer-worker.ts" : "renderer-worker.mjs";
+  return [process.execPath, new URL(workerFile, moduleUrl).pathname];
+}
+
+// Modules embedded in a compiled executable live under /$bunfs/ (B:/~BUN/ on Windows).
+function isCompiledExecutable(main: string): boolean {
+  return main.startsWith("/$bunfs/") || /^[A-Z]:[\\/]~BUN[\\/]/i.test(main);
 }
 
 function createBunRendererWorker(config: IsolatedRendererConfig): RendererWorker {
