@@ -374,6 +374,10 @@ Build this work in dependency order. The first vertical slice is a durable `/v1/
     secrets from console output as varlock does. A test keeps the two variable lists in step.
   - `--format=esm` keeps top-level await (the renderer worker uses it) working with `--bytecode`.
   - `apps/server/test/executable.test.ts` compiles the binary and checks both entry modes.
+  - DONE: zero configuration. The binary defaults `DATABASE_URL` and `BUNCRAWL_ARTIFACTS_PATH`
+    to `./data` (the image sets `/data`), and `CORS_ORIGIN` to `*` everywhere (keys travel in a
+    header, not cookies). Redis is opt-in: without `REDIS_URL`, `RedisJobDispatch` creates no
+    clients and workers rely on polling; the compose stack no longer runs Redis.
   - DONE: CLI. `src/cli.ts` makes the binary `buncrawl [serve]` (the default, so Docker is
     unchanged) or `buncrawl [scrape] <url> [options]`, which runs `scrape()` in-process with no
     database, Redis or server env. Options map onto the v1 scrape request and are validated by

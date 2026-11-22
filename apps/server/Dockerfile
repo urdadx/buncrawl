@@ -102,7 +102,11 @@ RUN missing="$(ldd "$BUN_CHROME_PATH" "$BUNCRAWL_LIGHTPANDA_PATH" | grep 'not fo
   if [ -n "$missing" ]; then echo "Missing browser libraries:\n$missing" >&2; exit 1; fi; \
   "$BUN_CHROME_PATH" --version && "$BUNCRAWL_LIGHTPANDA_PATH" version
 
-ENV NODE_ENV=production
+# `docker run -v buncrawl:/data` keeps the database and artifacts; the entrypoint makes /data
+# writable for the `bun` user.
+ENV NODE_ENV=production \
+  DATABASE_URL=file:/data/buncrawl.db \
+  BUNCRAWL_ARTIFACTS_PATH=/data/artifacts
 # The compiled server: Bun runtime, server, and browser and extraction workers in one read-only file.
 COPY --from=builder /app/apps/server/server /app/server
 

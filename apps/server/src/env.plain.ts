@@ -14,20 +14,21 @@ const boolean = v.pipe(
 /**
  * The variables of .env.schema, read straight from the environment. The single-file executable
  * uses this instead of varlock, which resolves the schema through its CLI at startup and so needs
- * the schema file and the CLI next to the binary. Unlike the schema's development defaults, the
- * database and artifact locations must be set explicitly.
+ * the schema file and the CLI next to the binary. Instead of the schema's development paths, data
+ * defaults to a `data` folder in the working directory (`/data` in the Docker image).
  */
 export const plainEnvSchema = v.object({
   NODE_ENV: v.optional(v.picklist(["development", "production", "test"]), "production"),
-  CORS_ORIGIN: url,
-  DATABASE_URL: text,
+  CORS_ORIGIN: v.optional(text, "*"),
+  DATABASE_URL: v.optional(text, "file:data/buncrawl.db"),
   DATABASE_AUTH_TOKEN: v.optional(text),
-  BUNCRAWL_ARTIFACTS_PATH: text,
+  BUNCRAWL_ARTIFACTS_PATH: v.optional(text, "data/artifacts"),
   BUNCRAWL_R2_ENDPOINT: v.optional(url),
   BUNCRAWL_R2_BUCKET: v.optional(text),
   BUNCRAWL_R2_ACCESS_KEY_ID: v.optional(text),
   BUNCRAWL_R2_SECRET_ACCESS_KEY: v.optional(text),
   BUNCRAWL_R2_REGION: v.optional(text),
+  REDIS_URL: v.optional(url),
   BUNCRAWL_PROXY_URL: v.optional(url),
   BUNCRAWL_API_KEY: v.optional(v.pipe(v.string(), v.minLength(16))),
   BUNCRAWL_WEBHOOK_SECRET: v.optional(v.pipe(v.string(), v.minLength(16))),

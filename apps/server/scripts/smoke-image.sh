@@ -33,11 +33,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-docker run -d --init --name "${name}" \
-  -e CORS_ORIGIN=http://localhost:3001 \
-  -e DATABASE_URL=file:/tmp/buncrawl.db \
-  -e BUNCRAWL_ARTIFACTS_PATH=/tmp/artifacts \
-  "${image}" >/dev/null
+# No configuration: the image's defaults must be enough to start.
+docker run -d --init --name "${name}" "${image}" >/dev/null
 
 # Runs inside the container so the check needs nothing on the host but Docker.
 docker exec "${name}" bun -e '

@@ -92,15 +92,22 @@ describe("compiled executable", () => {
     expect(usage.stdout.toString()).toBe("");
   }, 30_000);
 
-  test("refuses to start without the required environment variables", async () => {
+  test("starts with no configuration, keeping data in ./data", async () => {
+    const empty = await mkdtemp(join(dir, "empty-"));
     const child = Bun.spawn([executable], {
-      cwd: dir,
-      env: { PATH: process.env.PATH ?? "", PORT: "0" },
+      cwd: empty,
+      env: { PATH: process.env.PATH ?? "", PORT: "0", BUN_CHROME_PATH: "/nonexistent/chrome" },
       stdout: "pipe",
       stderr: "pipe",
     });
-    expect(await child.exited).not.toBe(0);
-    expect(await child.stderr.text()).toContain("DATABASE_URL: is required");
+    try {
+      const url = await listeningUrl(child.stdout);
+      expect((await fetch(new URL("/", url))).status).toBe(200);
+      expect(await Bun.file(join(empty, "data", "buncrawl.db")).exists()).toBe(true);
+    } finally {
+      child.kill();
+      await child.exited;
+    }
   }, 30_000);
 });
 

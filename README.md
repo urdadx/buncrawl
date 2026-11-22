@@ -53,6 +53,21 @@ The API is running at [http://localhost:3000](http://localhost:3000).
 
 ## Deployment
 
+### Docker
+
+The server image runs with no configuration; the volume keeps its SQLite database and artifacts:
+
+```bash
+docker build -f apps/server/Dockerfile -t buncrawl-server .
+```
+
+```bash
+docker run -d -p 3000:3000 -v buncrawl:/data -e BUNCRAWL_API_KEY=change-me-to-16-plus-chars buncrawl-server
+```
+
+Every variable in `apps/server/.env.schema` can be passed with `-e`. `GET /v1/capabilities` shows
+which browsers the image found.
+
 ### Docker Compose
 
 - Target: web + server
@@ -84,12 +99,14 @@ pnpm --filter server compile
 ```
 
 ```bash
-PORT=3000 CORS_ORIGIN=http://localhost:3001 DATABASE_URL=file:/var/lib/buncrawl/buncrawl.db BUNCRAWL_ARTIFACTS_PATH=/var/lib/buncrawl/artifacts ./apps/server/server
+BUNCRAWL_API_KEY=change-me-to-16-plus-chars ./apps/server/server
 ```
 
-- Required: `CORS_ORIGIN`, `DATABASE_URL` (a `file:` path or a libSQL URL), and
-  `BUNCRAWL_ARTIFACTS_PATH`. The binary does not fall back to the development paths in
-  `apps/server/.env.schema`; it exits and names any missing or invalid variable.
+- Nothing is required. Data goes to a `data` folder in the working directory unless
+  `DATABASE_URL` (a `file:` path or a libSQL URL) and `BUNCRAWL_ARTIFACTS_PATH` say otherwise;
+  `CORS_ORIGIN` defaults to `*`; `PORT` to 3000. An invalid variable stops startup with its name.
+- Redis is optional (`REDIS_URL`): it only wakes job workers in other server processes sooner;
+  workers poll the database without it.
 - Recommended: `BUNCRAWL_API_KEY`, the Bearer key clients must send (see Docker Compose above).
 - Optional: every other variable in `apps/server/.env.schema` (R2, `BUNCRAWL_PROXY_URL`,
   `BUNCRAWL_WEBHOOK_SECRET`, and the browser settings below).

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { parsePlainEnv, plainEnvSchema } from "../src/env.plain";
 
-const required = {
+const configured = {
   CORS_ORIGIN: "http://localhost:3001",
   DATABASE_URL: "file:data/buncrawl.db",
   BUNCRAWL_ARTIFACTS_PATH: "data/artifacts",
@@ -48,19 +48,32 @@ describe("parsePlainEnv", () => {
 
   test("reads plain variables, treating empty values as unset", () => {
     const env = parsePlainEnv({
-      ...required,
+      ...configured,
       BUNCRAWL_R2_BUCKET: "",
       BUNCRAWL_CHROME_NO_SANDBOX: "1",
       UNRELATED: "ignored",
     });
-    expect(env).toEqual({ NODE_ENV: "production", ...required, BUNCRAWL_CHROME_NO_SANDBOX: true });
+    expect(env).toEqual({
+      NODE_ENV: "production",
+      ...configured,
+      BUNCRAWL_CHROME_NO_SANDBOX: true,
+    });
   });
 
-  test("names missing and invalid variables without echoing values", () => {
+  test("starts with no variables at all, keeping data in ./data", () => {
+    expect(parsePlainEnv({})).toEqual({
+      NODE_ENV: "production",
+      CORS_ORIGIN: "*",
+      DATABASE_URL: "file:data/buncrawl.db",
+      BUNCRAWL_ARTIFACTS_PATH: "data/artifacts",
+    });
+  });
+
+  test("names invalid variables without echoing values", () => {
     expect(() =>
-      parsePlainEnv({ ...required, CORS_ORIGIN: "not a url", DATABASE_URL: undefined }),
-    ).toThrow(/CORS_ORIGIN[\s\S]*DATABASE_URL/);
-    expect(() => parsePlainEnv({ ...required, CORS_ORIGIN: "secret-ish" })).not.toThrow(
+      parsePlainEnv({ ...configured, REDIS_URL: "not a url", BUNCRAWL_API_KEY: "short" }),
+    ).toThrow(/REDIS_URL[\s\S]*BUNCRAWL_API_KEY/);
+    expect(() => parsePlainEnv({ ...configured, REDIS_URL: "secret-ish" })).not.toThrow(
       /secret-ish/,
     );
   });
