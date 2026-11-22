@@ -1,5 +1,8 @@
+import type { JsonSelectors } from "@buncrawl/contracts";
+
 import { absolutizeHtmlUrls } from "./clean";
 import { extractDocument, type ExtractedDocument } from "./extract";
+import { extractJson } from "./json";
 
 export interface ExtractJob {
   html: string;
@@ -7,11 +10,14 @@ export interface ExtractJob {
   onlyMainContent: boolean;
   /** Return the absolutized HTML as well; skip it when unused to avoid copying it between threads. */
   includeRawHtml?: boolean;
+  /** Selectors for the `json` format, applied to the absolutized full page. */
+  jsonSelectors?: JsonSelectors;
 }
 
 export interface ExtractJobOutput {
   extracted: ExtractedDocument;
   rawHtml?: string;
+  json?: Record<string, unknown>;
 }
 
 export interface ExtractJobMessage {
@@ -29,5 +35,9 @@ export function runExtractJob(job: ExtractJob): ExtractJobOutput {
     baseUrl: job.baseUrl,
     onlyMainContent: job.onlyMainContent,
   });
-  return { extracted, ...(job.includeRawHtml ? { rawHtml } : {}) };
+  return {
+    extracted,
+    ...(job.includeRawHtml ? { rawHtml } : {}),
+    ...(job.jsonSelectors ? { json: extractJson(rawHtml, job.jsonSelectors) } : {}),
+  };
 }

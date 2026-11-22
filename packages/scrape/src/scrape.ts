@@ -1,6 +1,7 @@
 import {
   DEFAULT_SCRAPE_TIMEOUT_MS,
   isBrowserOnlyFormat,
+  isJsonFormat,
   isScreenshotFormat,
   type ScrapeDocument,
   type ScrapeFormat,
@@ -10,6 +11,7 @@ import {
 import { Deadline, errorCodeOf } from "@buncrawl/core";
 import {
   extractInBackground,
+  invalidJsonSelector,
   type ExtractedDocument,
   type ExtractJob,
   type ExtractJobOutput,
@@ -148,6 +150,9 @@ async function scrapeWithTimings(
         : "branding requires JavaScript rendering",
     );
   }
+  const jsonFormat = formats.find(isJsonFormat);
+  const selectorError = jsonFormat && invalidJsonSelector(jsonFormat.selectors);
+  if (selectorError) return failure("INVALID_REQUEST", selectorError);
 
   try {
     const forcedRenderUrl =
@@ -207,13 +212,18 @@ async function scrapeWithTimings(
     }
 
     deadline.throwIfExpired();
-    const { rawHtml = "", extracted } = await timed("extractMs", () =>
+    const {
+      rawHtml = "",
+      extracted,
+      json,
+    } = await timed("extractMs", () =>
       (dependencies.extract ?? extractInBackground)(
         {
           html: selectedHtml,
           baseUrl: finalUrl,
           onlyMainContent: request.onlyMainContent ?? true,
           includeRawHtml: hasFormat(formats, "rawHtml"),
+          ...(jsonFormat ? { jsonSelectors: jsonFormat.selectors } : {}),
         },
         deadline.signal,
       ),
@@ -227,6 +237,7 @@ async function scrapeWithTimings(
       finalUrl,
       rawHtml,
     );
+    if (json) document.json = json;
 
     const warnings = [
       warning,

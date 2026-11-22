@@ -10,6 +10,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@buncrawl/contracts": "workspace:*",
     "@mozilla/readability": "^0.6.0",
     "linkedom": "^0.18.13",
     "node-html-markdown": "2.0.0"

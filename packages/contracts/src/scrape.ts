@@ -27,9 +27,78 @@ export const screenshotFormatSchema = v.strictObject({
   viewport: v.optional(screenshotViewportSchema),
 });
 
+/**
+ * Selector-based structured extraction. A field is a CSS selector string (the first match's text)
+ * or an object that reads an attribute, collects every match, or builds a nested record per match.
+ */
+export type JsonSelector =
+  | string
+  | { selector: string; attribute?: string; all?: boolean; fields?: JsonSelectors };
+export type JsonSelectors = { [field: string]: JsonSelector };
+
+const MAX_JSON_FIELDS = 100;
+const MAX_JSON_DEPTH = 4;
+
+const cssSelectorSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.nonEmpty("Selector cannot be empty"),
+  v.maxLength(500, "Selector cannot exceed 500 characters"),
+);
+
+const jsonSelectorSchema: v.GenericSchema<JsonSelector> = v.lazy(() =>
+  v.union([
+    cssSelectorSchema,
+    v.strictObject({
+      selector: cssSelectorSchema,
+      attribute: v.optional(
+        v.pipe(v.string(), v.regex(/^[A-Za-z_:][-\w:.]{0,63}$/, "Invalid attribute name")),
+      ),
+      all: v.optional(v.boolean()),
+      fields: v.optional(jsonSelectorsSchema),
+    }),
+  ]),
+);
+
+const jsonSelectorsSchema: v.GenericSchema<JsonSelectors> = v.pipe(
+  v.record(
+    v.pipe(v.string(), v.regex(/^[A-Za-z_][\w-]{0,63}$/, "Invalid field name")),
+    jsonSelectorSchema,
+  ),
+  v.check((fields) => Object.keys(fields).length > 0, "At least one field is required"),
+  v.check(
+    (fields) => Object.keys(fields).length <= MAX_JSON_FIELDS,
+    `At most ${MAX_JSON_FIELDS} fields per level`,
+  ),
+);
+
+export const jsonFormatSchema = v.strictObject({
+  type: v.literal("json"),
+  selectors: v.pipe(
+    jsonSelectorsSchema,
+    v.check(
+      (selectors) => selectorDepth(selectors) <= MAX_JSON_DEPTH,
+      `Selectors cannot nest more than ${MAX_JSON_DEPTH} levels`,
+    ),
+  ),
+});
+
+function selectorDepth(fields: JsonSelectors): number {
+  return (
+    1 +
+    Math.max(
+      0,
+      ...Object.values(fields).map((field) =>
+        typeof field === "object" && field.fields ? selectorDepth(field.fields) : 0,
+      ),
+    )
+  );
+}
+
 export const scrapeFormatSchema = v.union([
   v.picklist(["markdown", "html", "rawHtml", "links", "screenshots", "branding"]),
   screenshotFormatSchema,
+  jsonFormatSchema,
 ]);
 
 export const scrapeRequestSchema = v.strictObject({
@@ -43,7 +112,7 @@ export const scrapeRequestSchema = v.strictObject({
     v.pipe(
       v.array(scrapeFormatSchema),
       v.minLength(1, "At least one format is required"),
-      v.maxLength(6, "Too many formats"),
+      v.maxLength(7, "Too many formats"),
       v.check(
         (formats) => new Set(formats.map(formatKey)).size === formats.length,
         "Formats must be unique",
@@ -83,15 +152,23 @@ export const scrapeRequestSchema = v.strictObject({
 
 export type ScrapeFormat = v.InferOutput<typeof scrapeFormatSchema>;
 export type ScreenshotFormat = v.InferOutput<typeof screenshotFormatSchema>;
+export type JsonFormat = v.InferOutput<typeof jsonFormatSchema>;
 export type ScrapeRequest = v.InferOutput<typeof scrapeRequestSchema>;
 
 function formatKey(format: v.InferInput<typeof scrapeFormatSchema>): string {
-  return typeof format === "string" ? format : "screenshots";
+  if (typeof format === "string") return format;
+  return format.type === "screenshot" ? "screenshots" : format.type;
 }
 
 /** True for the "screenshots" format and for screenshot option objects. */
-export function isScreenshotFormat(format: ScrapeFormat): boolean {
-  return format === "screenshots" || typeof format === "object";
+export function isScreenshotFormat(
+  format: ScrapeFormat,
+): format is "screenshots" | ScreenshotFormat {
+  return format === "screenshots" || (typeof format === "object" && format.type === "screenshot");
+}
+
+export function isJsonFormat(format: ScrapeFormat): format is JsonFormat {
+  return typeof format === "object" && format.type === "json";
 }
 
 /** Formats that can only be produced by a real browser, never from fetched HTML. */
@@ -191,6 +268,8 @@ export const scrapeDocumentSchema = v.strictObject({
   links: v.optional(v.array(v.string())),
   screenshot: v.optional(v.string()),
   branding: v.optional(brandingProfileSchema),
+  /** Values extracted by the `json` format's selectors; missing matches are null. */
+  json: v.optional(v.record(v.string(), v.unknown())),
   metadata: v.strictObject({
     sourceURL: v.string(),
     finalURL: v.string(),

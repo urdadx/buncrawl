@@ -417,6 +417,9 @@ importers:
 
   packages/extract:
     dependencies:
+      '@buncrawl/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@mozilla/readability':
         specifier: ^0.6.0
         version: 0.6.0

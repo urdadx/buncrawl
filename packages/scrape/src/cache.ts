@@ -20,7 +20,8 @@ export function scrapeCacheKey(request: ScrapeRequest): string | undefined {
   url.hash = "";
   const identity = JSON.stringify({
     url: url.href,
-    formats: formats.map((format) => format as string).sort(),
+    // Object formats (json selectors) are part of the identity; sort keeps order irrelevant.
+    formats: formats.map((format) => JSON.stringify(format)).sort(),
     onlyMainContent: request.onlyMainContent ?? true,
     renderJs: request.renderJs ?? "auto",
     waitForMs: request.waitForMs ?? 0,

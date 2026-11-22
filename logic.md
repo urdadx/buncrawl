@@ -164,6 +164,7 @@ Detector classifies returned HTML
 - Main-content extraction compares deterministic cleanup with Readability and only accepts Readability when quality improves without excessive content loss.
 - Extraction runs on a bounded pool of Bun worker threads so parsing never blocks the event loop; a deadline terminates its worker, and extraction falls back to the main thread when workers cannot start.
 - Scrape results are cached in SQLite only on request: a scrape is served from cache when the client sends `maxAge` (ms, up to 30 days) and a result at most that old exists; without `maxAge` it always scrapes fresh. Successful results are stored unless `storeInCache: false`. The cache key covers the URL and every option that changes the output; screenshot requests are never cached. Entries older than 30 days, and the oldest beyond 10,000 entries, are pruned hourly.
+- The `json` format is selector-based, not LLM-based: `{ type: "json", selectors }` maps field names to CSS selectors (first match's text), or to `{ selector, attribute?, all?, fields? }` for attributes, lists (capped at 1,000 matches) and nested records. It runs in the extraction worker on the absolutized full page, missing matches are null, and invalid CSS fails the request before fetching.
 - The current product target is self-hosted deployment; commercial multi-tenant infrastructure is deferred.
 - Drizzle with libSQL is the persistence layer: a local SQLite file is the default and Turso is an optional remote database.
 - SQLite/libSQL is authoritative for job state, results, cancellation, progress, and crawl-frontier state.
@@ -315,11 +316,11 @@ Decisions:
   Chrome launch. The containment that remains is: the image's unprivileged `bun` user, one browser
   per worker process, the CDP request guard, and the DNS-pinning safety proxy. Set it to `0` where
   the container may create user namespaces.
-- At startup the server checks each renderer: its executable resolves, prints a version, and
 - The server image's entrypoint starts as root only to create `/data` and, when anything in it
   belongs to another user, `chown -R` it to `bun` (UID 1000). It then drops to `bun` with
   `setpriv`. A bind-mounted `./.data` therefore works whichever host user created it, including
   data written as root by earlier images. A container started with `--user` skips that step.
+- At startup the server checks each renderer: its executable resolves, prints a version, and
   loads a `data:` probe page with the same flags renders use. This catches missing libraries and
   a missing sandbox before the first render. `GET /v1/capabilities` returns that report
   (`renderers[]` with the executable, version, error, and the existing `RendererCapabilities`,
