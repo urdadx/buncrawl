@@ -101,6 +101,27 @@ PORT=3000 CORS_ORIGIN=http://localhost:3001 DATABASE_URL=file:/var/lib/buncrawl/
 - Unlike the varlock setup used by `pnpm run dev` and the Docker image, the binary does not
   redact secrets from its console output.
 
+#### Command line
+
+The same binary scrapes a single page without a server, database or configuration:
+
+```bash
+./apps/server/server https://example.com
+```
+
+```bash
+./apps/server/server scrape https://example.com --render --format html --screenshot page.png
+```
+
+- `buncrawl <url>` is short for `buncrawl scrape <url>`; with no arguments, or `serve`, it starts
+  the API server.
+- One text format (`--format markdown|html|rawHtml|links`, Markdown by default) prints as-is on
+  stdout; several formats, or `--json`, print the API response as JSON. Failures print
+  `buncrawl: CODE: message` on stderr and exit 1; usage errors exit 2.
+- `--render` forces a browser and `--no-render` never starts one; by default the page decides,
+  as with `renderJs: "auto"`. Renders use local Chrome or Lightpanda found the same way as the
+  server. `buncrawl --help` lists every option.
+
 ## Project Structure
 
 ```

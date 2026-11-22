@@ -78,6 +78,20 @@ describe("compiled executable", () => {
     expect(output).not.toContain("Invalid environment variables");
   }, 30_000);
 
+  test("runs CLI commands without any server configuration", async () => {
+    const help = Bun.spawnSync([executable, "--help"], { cwd: dir, env: { PATH: "" } });
+    expect(help.exitCode).toBe(0);
+    expect(help.stdout.toString()).toContain("buncrawl scrape <url>");
+
+    const usage = Bun.spawnSync([executable, "scrape", "not-a-url"], {
+      cwd: dir,
+      env: { PATH: "" },
+    });
+    expect(usage.exitCode).toBe(2);
+    expect(usage.stderr.toString()).toContain("URL must be valid");
+    expect(usage.stdout.toString()).toBe("");
+  }, 30_000);
+
   test("refuses to start without the required environment variables", async () => {
     const child = Bun.spawn([executable], {
       cwd: dir,

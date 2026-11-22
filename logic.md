@@ -368,6 +368,12 @@ Build this work in dependency order. The first vertical slice is a durable `/v1/
     secrets from console output as varlock does. A test keeps the two variable lists in step.
   - `--format=esm` keeps top-level await (the renderer worker uses it) working with `--bytecode`.
   - `apps/server/test/executable.test.ts` compiles the binary and checks both entry modes.
+  - DONE: CLI. `src/cli.ts` makes the binary `buncrawl [serve]` (the default, so Docker is
+    unchanged) or `buncrawl [scrape] <url> [options]`, which runs `scrape()` in-process with no
+    database, Redis or server env. Options map onto the v1 scrape request and are validated by
+    `scrapeRequestSchema`. Results go to stdout; browser worker timings and errors go to stderr
+    (`BUNCRAWL_RENDERER_LOGS=stderr`). The entry point awaits the command: with a floating
+    `import()` promise Bun exited mid-fetch with no output.
 - Use Drizzle schemas and migrations with the existing libSQL client.
 - Default to `file:/data/buncrawl.db`; allow a Turso/libSQL URL and auth token as optional configuration.
 - Add an artifact-store interface shared by jobs and synchronous routes.
