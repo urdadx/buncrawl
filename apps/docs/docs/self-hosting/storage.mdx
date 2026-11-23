@@ -1,0 +1,43 @@
+---
+title: Storage
+description: Where buncrawl keeps its database, stored files and cache, and how long it keeps them.
+---
+
+## Database
+
+buncrawl keeps jobs, results, the crawl queue and the scrape cache in one SQLite file
+(`DATABASE_URL`). Jobs survive restarts: a server that stops mid-crawl picks the crawl up again
+when it starts. Back up this file, or the Docker `/data` volume, to keep your data.
+
+Remote databases aren't supported; `DATABASE_URL` must be a `file:` URL.
+
+## Stored files
+
+Screenshots, and page content of 64 KiB or more in job results, are stored as files under
+`BUNCRAWL_ARTIFACTS_PATH`.
+
+To store them in Cloudflare R2 instead, set `BUNCRAWL_R2_ENDPOINT`, `BUNCRAWL_R2_BUCKET`,
+`BUNCRAWL_R2_ACCESS_KEY_ID` and `BUNCRAWL_R2_SECRET_ACCESS_KEY` (and `BUNCRAWL_R2_REGION` if your
+provider needs it). buncrawl uses R2 only when all four are set and the bucket passes a check at
+startup; otherwise it uses the folder. The server logs which one it picked.
+
+## Scrape cache
+
+A scrape with `maxAge` set can be answered from an earlier result up to that many milliseconds old;
+see [Scrape](/api/scrape#caching). The cache:
+
+- keeps at most 10,000 entries, each up to 5 MiB, and drops entries older than 30 days;
+- never stores requests that ask for a screenshot;
+- isn't used by crawls.
+
+## Retention
+
+Cleanup runs when the server starts and then every hour:
+
+| Data | Kept for |
+| --- | --- |
+| Job events (the [event stream](/api/jobs#events)) | 7 days after the job finishes |
+| Webhook delivery records | 14 days after delivery or final failure |
+| Scrape cache entries | Up to 30 days |
+
+Jobs and their results stay in the database until you delete the database file.

@@ -1,0 +1,60 @@
+---
+title: Quickstart
+description: Install buncrawl, scrape your first page from the command line, then run the API server.
+---
+
+## Install
+
+On Linux or macOS (x64 or arm64), the install script downloads the latest release, checks it against
+the release's `SHA256SUMS`, and puts the `buncrawl` binary in `/usr/local/bin` (or `~/.local/bin`
+when that isn't writable). It never uses `sudo`.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/urdadx/buncrawl/main/install.sh | sh
+```
+
+Check it worked:
+
+```bash
+buncrawl --version
+```
+
+## Scrape a page
+
+Pass a URL; `https://` is added when you leave it out. buncrawl prints the page's main content as
+Markdown:
+
+```bash
+buncrawl example.com
+```
+
+Pages that need JavaScript are rendered in a browser automatically when Chrome or Lightpanda is
+installed. See [Browsers](/self-hosting/browsers) for how buncrawl finds them.
+
+## Crawl a site
+
+Follow links from a start page and write each page as a Markdown file:
+
+```bash
+buncrawl crawl example.com --limit 20 --out pages
+```
+
+## Run the API server
+
+The same binary is the API server. With no arguments it starts on port 3000 and keeps its data in a
+`data` folder in the current directory:
+
+```bash
+BUNCRAWL_API_KEY=change-me-to-16-plus-chars buncrawl serve
+```
+
+Then scrape over HTTP:
+
+```bash
+curl -s localhost:3000/v1/scrape \
+  -H "Authorization: Bearer change-me-to-16-plus-chars" \
+  -H "content-type: application/json" \
+  -d '{"url": "https://example.com", "formats": ["markdown"]}'
+```
+
+To run it in Docker instead, with Chrome and Lightpanda included, see [Docker](/self-hosting/docker).

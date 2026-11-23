@@ -1,0 +1,51 @@
+---
+title: Browsers
+description: How buncrawl finds and uses Chrome and Lightpanda to render JavaScript.
+---
+
+buncrawl fetches pages over plain HTTP first and renders them in a browser when they need
+JavaScript, or when you ask for a screenshot or for rendering. Two browsers are supported:
+
+- **Chrome** (or Chromium, Brave or Edge), driven through Bun.WebView. It renders the widest range
+  of sites, and is needed for branding and other measurements that use page styles.
+- **Lightpanda**, a lightweight headless browser that is quicker to start and lighter on memory.
+
+Without either, buncrawl still scrapes over HTTP.
+
+## How buncrawl finds them
+
+For each browser, buncrawl uses the first of:
+
+1. `BUN_CHROME_PATH` or `BUNCRAWL_LIGHTPANDA_PATH`. When set, nothing else is tried.
+2. The browser on `PATH`: `google-chrome-stable`, `google-chrome`, `chromium-browser`,
+   `chromium`, `brave-browser`, `microsoft-edge` or `chrome` (on Windows `chrome`, `chromium`,
+   `brave` or `msedge`), and `lightpanda`.
+3. Its usual install folder:
+
+| | Chrome-family | Lightpanda |
+| --- | --- | --- |
+| macOS | `/Applications` and `~/Applications`: Google Chrome, Chromium, Brave, Edge | `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin` |
+| Linux | `/usr/bin`, `/opt/google/chrome`, `/snap/bin` | `~/.local/bin`, `/usr/local/bin`, `/usr/bin` |
+| Windows | `Program Files`, `Program Files (x86)` and `%LOCALAPPDATA%` | No Windows build |
+| Any | Playwright's browser cache, newest build first | |
+
+## The startup check
+
+When the server starts, it checks each browser: the executable resolves, reports a version, and
+renders a test page with the same flags real renders use. A browser that's present but broken, for
+example missing a library or unable to start its sandbox, is reported as unavailable instead of
+failing the first scrape.
+
+`GET /v1/capabilities` returns that report:
+
+```bash
+curl -s localhost:3000/v1/capabilities -H "Authorization: Bearer $BUNCRAWL_API_KEY"
+```
+
+Each browser lists its executable, version, whether it's available and, if not, why.
+
+## Chrome's sandbox
+
+Some environments, Docker's default profile among them, block the user namespaces Chrome's sandbox
+needs, and Chrome then fails the startup check. Set `BUNCRAWL_CHROME_NO_SANDBOX=1` there. Each page
+still renders in its own worker process, behind buncrawl's network safety checks.

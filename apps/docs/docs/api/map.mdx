@@ -1,0 +1,30 @@
+---
+title: Map
+description: POST /v1/map starts a job that discovers a site's URLs from its sitemaps and links.
+---
+
+```bash
+curl -s localhost:3000/v1/map \
+  -H "Authorization: Bearer $BUNCRAWL_API_KEY" \
+  -H "content-type: application/json" \
+  -d '{"url": "https://example.com", "maxUrls": 500}'
+```
+
+Like a [crawl](/api/crawl), a map runs in the background and returns `202` with a `jobId`. Read the
+URLs with [`GET /v1/map/:id`](/api/jobs): each page of results has a `urls` array with the URLs
+discovered on that page.
+
+## Request
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `url` | string | required | Site to map. |
+| `maxUrls` | integer | `100` | Most URLs to discover, up to 100,000. |
+| `maxDepth` | integer | `10` | How many path segments below the start URL to go, up to 100. |
+| `maxBytes` | integer | 50 MiB | Most content to download in total, up to 1 GiB. |
+| `timeoutMs` | integer | `120000` | Deadline for the whole job, up to 7 days. |
+| `pathPrefix` | boolean | `false` | Stay under the start URL's path. |
+| `includeSubdomains` | boolean | `false` | Include the site's subdomains. |
+| `webhook` | object | | [Webhook](/api/webhooks) to notify. |
+
+Map follows the same site, `robots.txt` and sitemap rules as [crawl](/api/crawl#which-pages-are-crawled).

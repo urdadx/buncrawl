@@ -1,0 +1,17 @@
+---
+title: Overview
+description: Run the buncrawl API server with Docker or as a single binary.
+---
+
+buncrawl runs on your own machine or server. There are two ways to run the API server:
+
+| | [Docker](/self-hosting/docker) | [Binary](/self-hosting/binary) |
+| --- | --- | --- |
+| Browsers | Chrome and Lightpanda included, pinned and tested | Uses the browsers installed on the host |
+| Platforms | Linux x64 (`linux/amd64`) | Linux and macOS, x64 and arm64 |
+| Install | `docker run` | `curl … install.sh \| sh` |
+| Best for | Servers, and the most reliable JavaScript rendering | Laptops, quick setups, and the [command line](/cli) |
+
+Both start with no configuration: the database and stored files go in a data folder, and every
+setting has a default. Set [`BUNCRAWL_API_KEY`](/self-hosting/security) before exposing the server
+to anyone else.

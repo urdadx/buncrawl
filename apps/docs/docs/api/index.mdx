@@ -1,0 +1,64 @@
+---
+title: Overview
+description: Endpoints, authentication and errors for the buncrawl HTTP API.
+---
+
+The server listens on port 3000 by default. Requests and responses are JSON.
+
+| Endpoint | Description |
+| --- | --- |
+| [`POST /v1/scrape`](/api/scrape) | Scrape one page and return it |
+| [`POST /v1/crawl`](/api/crawl) | Start a crawl job: follow links and scrape every page |
+| [`POST /v1/map`](/api/map) | Start a map job: discover a site's URLs |
+| [`POST /v1/batch/scrape`](/api/batch-scrape) | Start a job that scrapes a list of URLs |
+| [`GET`/`DELETE /v1/{crawl,map,batch/scrape}/:id`](/api/jobs) | Read a job's results, or cancel it |
+| [`GET /v1/{crawl,map,batch/scrape}/:id/events`](/api/jobs#events) | Stream a job's progress |
+| [`GET /v1/capabilities`](/self-hosting/browsers#the-startup-check) | Which browsers the server can use |
+| `GET /` | Health check; answers `OK` without a key |
+| [`/v2/*`](/api/firecrawl) | Firecrawl v2-compatible endpoints |
+
+## Authentication
+
+When the server has [`BUNCRAWL_API_KEY`](/self-hosting/security#api-keys) set, send the key as a
+Bearer token:
+
+```bash
+curl -s localhost:3000/v1/scrape \
+  -H "Authorization: Bearer $BUNCRAWL_API_KEY" \
+  -H "content-type: application/json" \
+  -d '{"url": "https://example.com"}'
+```
+
+A missing or wrong key gets `401`:
+
+```json
+{ "success": false, "code": "UNAUTHORIZED", "error": "Missing or invalid API key" }
+```
+
+## Errors
+
+Errors carry a machine-readable `code` and a readable `error` message. Validation errors add
+`details`, a list of what's wrong with the request.
+
+```json
+{ "success": false, "code": "INVALID_REQUEST", "error": "Invalid scrape request", "details": ["URL must be valid"] }
+```
+
+`POST /v1/scrape` errors include `"success": false`; job endpoint errors have only `code`, `error`
+and `details`.
+
+| Status | Codes |
+| --- | --- |
+| `400` | `INVALID_JSON`, `INVALID_REQUEST`, `INVALID_URL`, `BLOCKED_DESTINATION`, `INVALID_JOB_ID`, `INVALID_PAGINATION`, `INVALID_EVENT_ID` |
+| `401` | `UNAUTHORIZED` |
+| `404` | `JOB_NOT_FOUND` |
+| `405` | `METHOD_NOT_ALLOWED` |
+| `429` | `QUEUE_FULL` |
+| `499` | `REQUEST_CANCELLED` (the client went away) |
+| `502` | `DNS_RESOLUTION_FAILED`, `FETCH_FAILED`, `INVALID_REDIRECT`, `TOO_MANY_REDIRECTS`, `RESPONSE_TOO_LARGE` |
+| `503` | `RENDERER_UNAVAILABLE` (a browser was needed and none is available) |
+| `504` | `DEADLINE_EXCEEDED` |
+| `500` | Anything else, such as `EMPTY_CONTENT` or `EXTRACTION_FAILED` |
+
+`BLOCKED_DESTINATION` means the URL resolves to a private or reserved address; see
+[network protections](/self-hosting/security#network-protections).

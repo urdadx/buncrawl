@@ -1,0 +1,122 @@
+---
+title: Scrape
+description: POST /v1/scrape fetches one page and returns it as Markdown, HTML, links, screenshots, branding or structured JSON.
+---
+
+```bash
+curl -s localhost:3000/v1/scrape \
+  -H "Authorization: Bearer $BUNCRAWL_API_KEY" \
+  -H "content-type: application/json" \
+  -d '{"url": "https://example.com", "formats": ["markdown", "links"]}'
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "metadata": {
+      "sourceURL": "https://example.com",
+      "finalURL": "https://example.com/",
+      "title": "Example Domain",
+      "statusCode": 200,
+      "contentType": "text/html",
+      "renderer": "fetch"
+    },
+    "markdown": "This domain is for use in documentation examples…",
+    "links": ["https://iana.org/help/example-domains"]
+  }
+}
+```
+
+## Request
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `url` | string | required | An `http` or `https` URL. |
+| `formats` | array | `["markdown"]` | What to return; see [formats](#formats). 1–7 entries, each at most once. |
+| `renderJs` | `true` \| `false` \| `"auto"` | `"auto"` | Whether to render the page in a browser. See [rendering](#rendering). |
+| `onlyMainContent` | boolean | `true` | Keep only the main content, without navigation, headers and footers. |
+| `waitForMs` | integer | none | Extra time, up to 30000 ms, to let a rendered page settle. |
+| `timeout` | integer | `30000` | Deadline for the whole scrape, 1–120000 ms. |
+| `maxAge` | integer | `0` | Accept a cached result up to this many ms old; `0` always scrapes fresh. See [caching](#caching). |
+| `storeInCache` | boolean | `true` | Save the result for later `maxAge` requests. |
+
+Unknown fields are rejected with `400 INVALID_REQUEST`.
+
+## Formats
+
+| Format | Returns |
+| --- | --- |
+| `"markdown"` | `markdown`: the page as Markdown |
+| `"html"` | `html`: cleaned HTML of the kept content |
+| `"rawHtml"` | `rawHtml`: the page's HTML as received |
+| `"links"` | `links`: the URLs the page links to |
+| `"screenshots"` | `screenshot`: a PNG as a `data:` URL. Needs a browser. |
+| `{"type": "screenshot", "fullPage": true, "viewport": {"width": 1280, "height": 800}}` | A screenshot with options: the whole page (default `false`), and a viewport up to 7680×4320. Use instead of `"screenshots"`, not with it. |
+| `"branding"` | `branding`: the page's colours, fonts, typography, spacing, logo and images. Needs Chrome. |
+| `{"type": "json", "selectors": {…}}` | `json`: structured data picked out with CSS selectors; see below. |
+
+### Structured JSON
+
+The `json` format maps field names to CSS selectors and returns what they match, from the full page
+(even with `onlyMainContent`):
+
+```json
+{
+  "type": "json",
+  "selectors": {
+    "title": "h1",
+    "price": ".price",
+    "image": { "selector": "img.product", "attribute": "src" },
+    "tags": { "selector": ".tag", "all": true },
+    "reviews": {
+      "selector": ".review",
+      "all": true,
+      "fields": { "author": ".author", "text": ".body" }
+    }
+  }
+}
+```
+
+- A selector string returns the first match's text, with whitespace collapsed.
+- `attribute` returns that attribute instead of the text.
+- `all: true` returns an array of every match, up to 1,000.
+- `fields` returns an object per match, built from selectors inside it, nested up to 4 levels.
+- A selector with no match returns `null`. An invalid selector fails the request with `400`
+  before the page is fetched.
+
+Field names start with a letter or `_` and use letters, digits, `_` and `-`, up to 64 characters,
+with 1–100 fields per level.
+
+## Rendering
+
+- `"auto"` fetches the page over HTTP and renders it in a browser only when it looks like it needs
+  JavaScript, keeping the rendered version if it's better.
+- `true` always renders; `false` never does.
+- `screenshots` and `branding` always render, so they can't be used with `renderJs: false`.
+
+`metadata.renderer` says what produced the result: `fetch`, `lightpanda` or `webview` (Chrome).
+If rendering was needed but no browser is available, the scrape fails with `503
+RENDERER_UNAVAILABLE`. When `"auto"` couldn't render, the response still succeeds with the fetched
+page and a `warning`, such as `Browser rendering was unavailable; returned fetched content`.
+
+## Caching
+
+Set `maxAge` to accept a recent result instead of scraping again:
+
+```json
+{ "url": "https://example.com", "maxAge": 3600000 }
+```
+
+When `maxAge` is above 0, `metadata.cacheState` is `hit` or `miss`, and a hit adds `cachedAt`.
+Results are cached per URL, formats, `onlyMainContent`, `renderJs` and `waitForMs`. Requests for
+screenshots are never cached. See [Storage](/self-hosting/storage#scrape-cache) for the limits.
+
+## Response
+
+| Field | Description |
+| --- | --- |
+| `success` | `true` |
+| `data.metadata` | `sourceURL`, `finalURL` (after redirects), `title`, `statusCode`, `contentType`, `renderer`, and `cacheState` / `cachedAt` when caching |
+| `data.<format>` | One field per requested format: `markdown`, `html`, `rawHtml`, `links`, `screenshot`, `branding`, `json` |
+| `warning` | Present when something degraded but the scrape still succeeded |

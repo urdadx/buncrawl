@@ -1,0 +1,48 @@
+---
+title: Binary
+description: Run the API server from the single buncrawl binary, without Docker.
+---
+
+The `buncrawl` binary contains the Bun runtime, the server, and its browser and extraction
+workers. It needs no `node_modules`, `.env` file or database server.
+
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/urdadx/buncrawl/main/install.sh | sh
+```
+
+The script picks the build for your OS and CPU (Linux or macOS, x64 or arm64), verifies it against
+the release's `SHA256SUMS`, and installs to `/usr/local/bin` when writable, else `~/.local/bin`.
+It never uses `sudo`.
+
+| Variable | Effect |
+| --- | --- |
+| `BUNCRAWL_VERSION=v0.1.1` | Install that release instead of the latest. Needed for pre-releases. |
+| `BUNCRAWL_INSTALL_DIR=dir` | Install into `dir`. |
+
+Linux distributions based on musl, such as Alpine, aren't supported; use the
+[Docker image](/self-hosting/docker) there. There's no Windows build yet.
+
+## Run the server
+
+```bash
+BUNCRAWL_API_KEY=change-me-to-16-plus-chars buncrawl serve
+```
+
+`buncrawl` with no arguments does the same. The server listens on port 3000 (`PORT` changes it)
+and keeps its database and stored files in a `data` folder in the current directory. Every other
+setting is optional; see [Configuration](/self-hosting/configuration).
+
+JavaScript rendering uses the browsers installed on the machine; see
+[Browsers](/self-hosting/browsers).
+
+## Logs
+
+The binary logs to stdout and stderr. Unlike `pnpm run dev`, which loads settings through varlock,
+it doesn't redact secret values from what it logs.
+
+## Upgrade
+
+Run the install script again. It replaces the binary in place; a running server keeps the old file
+until it restarts.

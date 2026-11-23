@@ -1,0 +1,40 @@
+---
+title: scrape
+description: Scrape one page and print it as Markdown, HTML, raw HTML, links or JSON.
+---
+
+```bash
+buncrawl scrape <url> [options]
+```
+
+`buncrawl <url>` does the same. With one format, the result prints as-is; with several, or with
+`--json`, buncrawl prints the full API response as JSON.
+
+```bash
+buncrawl example.com
+buncrawl example.com --format links
+buncrawl example.com --render --format html --screenshot page.png
+```
+
+## Options
+
+| Option | Description |
+| --- | --- |
+| `-f, --format <name>` | `markdown` (default), `html`, `rawHtml` or `links`. Repeat for several. |
+| `--render` | Always render the page in a browser. |
+| `--no-render` | Never start a browser; plain HTTP only. |
+| `--full-page` | Keep navigation, headers and footers. By default only the main content is kept. |
+| `--wait <ms>` | Extra time to let the page settle after it loads. |
+| `--screenshot <file>` | Save a PNG screenshot. Renders the page, so it can't be combined with `--no-render`. |
+| `--timeout <ms>` | Deadline for the whole scrape. Default `30000`. |
+| `--json` | Print the full API response as JSON. |
+
+## Output
+
+- `markdown`, `html` and `rawHtml` print the text.
+- `links` prints one URL per line.
+- `--json` prints the same response as [`POST /v1/scrape`](/api/scrape), including metadata
+  such as the final URL, status code and the renderer used.
+
+On failure buncrawl prints `buncrawl: CODE: message` to stderr and exits `1`; with `--json`, the
+failure response goes to stdout instead.

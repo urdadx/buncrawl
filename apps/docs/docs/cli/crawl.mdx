@@ -1,0 +1,44 @@
+---
+title: crawl
+description: Follow links from a start page and scrape every page found, as JSON Lines or Markdown files.
+---
+
+```bash
+buncrawl crawl <url> [options]
+```
+
+```bash
+buncrawl crawl example.com --limit 50 --depth 2 > pages.jsonl
+buncrawl crawl example.com --limit 50 --out pages --screenshots
+```
+
+## Options
+
+Crawl takes the [page options](/cli/scrape#options) `--format`, `--render`, `--no-render`,
+`--full-page` and `--wait`, plus:
+
+| Option | Description |
+| --- | --- |
+| `--limit <n>` | Most pages to crawl. Default `100`. |
+| `--depth <n>` | Most links to follow from the start URL. Default `10`. |
+| `--timeout <ms>` | Deadline for the whole crawl. Default `120000`. |
+| `--page-timeout <ms>` | Deadline for each page. |
+| `--subdomains` | Include the site's subdomains. Off by default. |
+| `--no-path-prefix` | Also crawl pages outside the start URL's path. By default a crawl of `example.com/docs` stays under `/docs`. |
+| `--out <dir>` | Write each page as a Markdown file into `<dir>` instead of printing JSON Lines. |
+| `--screenshots` | Also save each page's screenshot as a PNG. Needs `--out`, and renders every page. |
+| `--db <file>` | Keep the crawl in this SQLite file instead of memory, for very large crawls. |
+
+## Output
+
+Without `--out`, each page that ran prints as one JSON object per line (JSON Lines), in the shape
+[`GET /v1/crawl/:id`](/api/crawl) returns. Pages cancelled before their turn are left out.
+
+With `--out`, each page becomes `<dir>/<name>.md`, starting with a comment that holds its URL. File
+names come from the URL and use only letters, digits, `.`, `_` and `-`, so a page can never write
+outside the folder. buncrawl prints the paths it wrote.
+
+## Stopping
+
+The first Ctrl-C cancels the crawl and still prints the pages that finished, then exits `130`. A
+second Ctrl-C quits at once.

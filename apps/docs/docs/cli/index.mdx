@@ -1,0 +1,40 @@
+---
+title: Overview
+description: One binary scrapes, maps and crawls from the terminal, and runs the API server.
+---
+
+The `buncrawl` binary works without a server, a database or any configuration. Results go to
+stdout, so they pipe into other tools; progress and errors go to stderr.
+
+| Command | What it does |
+| --- | --- |
+| `buncrawl <url>` | Scrape one page; short for `buncrawl scrape <url>` |
+| [`buncrawl scrape <url>`](/cli/scrape) | Scrape one page and print it |
+| [`buncrawl map <url>`](/cli/map) | Discover a site's URLs |
+| [`buncrawl crawl <url>`](/cli/crawl) | Follow links and scrape every page found |
+| [`buncrawl batch <file>`](/cli/batch) | Scrape a list of URLs |
+| `buncrawl serve` | Start the [API server](/self-hosting/binary); also what runs with no arguments |
+| `buncrawl --version` | Print the version |
+| `buncrawl --help` | List every command and option |
+
+## URLs
+
+A URL without a scheme gets `https://`: `buncrawl example.com/docs` scrapes
+`https://example.com/docs`. There is no fallback to plain HTTP; type `http://` for a site that only
+serves it. Only `http` and `https` URLs are accepted.
+
+## JavaScript rendering
+
+By default buncrawl fetches each page over HTTP and starts a browser only when the page needs one.
+`--render` always uses a browser and `--no-render` never does. Rendering uses Chrome or Lightpanda
+when installed; without either, buncrawl scrapes over plain HTTP. See
+[Browsers](/self-hosting/browsers).
+
+## Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Success |
+| `1` | The scrape or job failed |
+| `2` | Invalid command or options; nothing was fetched |
+| `130` | Stopped with Ctrl-C; a crawl still prints the pages that finished |

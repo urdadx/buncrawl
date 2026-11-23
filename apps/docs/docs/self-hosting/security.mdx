@@ -1,0 +1,64 @@
+---
+title: Security
+description: API keys, network protections and the limits that keep a public buncrawl server safe.
+---
+
+## API keys
+
+Set `BUNCRAWL_API_KEY` before anyone else can reach your server. Without it the API is open to
+anyone who can connect, and the server logs a warning at startup.
+
+```bash
+BUNCRAWL_API_KEY=$(openssl rand -hex 24)
+```
+
+Clients then send the key as a Bearer token, the same way Firecrawl SDKs do:
+
+```bash
+curl -s localhost:3000/v1/scrape -H "Authorization: Bearer $BUNCRAWL_API_KEY" ...
+```
+
+- Each key needs at least 16 characters. List several, separated by commas, to roll out a new key
+  before removing the old one.
+- A missing or wrong key gets `401` with code `UNAUTHORIZED`.
+- Only `GET /` (the health check) and the dashboard's `/trpc` health query work without a key.
+
+## CORS
+
+`CORS_ORIGIN` sets which web pages may call the API from a browser. It defaults to `*`. Because
+keys travel in a header, not cookies, a page on another site can't use a visitor's access. Set it
+to your dashboard's origin to be stricter.
+
+## Network protections
+
+buncrawl refuses to fetch anything on a private network, so a public server can't be used to reach
+your internal services:
+
+- Only `http` and `https` URLs, up to 2048 characters, without credentials in the URL.
+- Every address a hostname resolves to must be public. Private, loopback, link-local and other
+  reserved IPv4 and IPv6 ranges are blocked, as are names like `localhost` and
+  `metadata.google.internal`.
+- Every redirect is checked again, with at most 10 redirects.
+- Browsers are held to the same rules: Chrome's requests go through a proxy that pins each
+  connection to a checked address, and both browsers are tested against private addresses in
+  every published image.
+
+## Crawling politely
+
+Map and crawl jobs follow `robots.txt` for the user agent `Buncrawl`, including `Crawl-delay`, and
+send one request at a time to each host. A site whose `robots.txt` can't be read because of an
+error (anything but `404`) is treated as disallowing everything. There is no option to ignore
+`robots.txt`.
+
+## Limits
+
+| Limit | Value |
+| --- | --- |
+| Response size per page | 10 MiB |
+| Scrape timeout | 30 s by default, up to 120 s |
+| URLs in one batch | 1,000 |
+| Batch pages queued or running across the server | 10,000; more gets `429 QUEUE_FULL` |
+| Pages or URLs in one map or crawl | 100 by default, up to 100,000 |
+| Browser renders at once | 2 per browser, with up to 32 waiting |
+
+There is no per-client rate limiting; put a reverse proxy in front of the server if you need it.

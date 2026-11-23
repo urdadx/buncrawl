@@ -1,0 +1,55 @@
+---
+title: Docker
+description: Run the buncrawl server image, with Chrome and Lightpanda included.
+---
+
+```bash
+docker run -d --name buncrawl -p 3000:3000 -v buncrawl:/data \
+  -e BUNCRAWL_API_KEY=change-me-to-16-plus-chars \
+  ghcr.io/urdadx/buncrawl:latest
+```
+
+The API is then at `http://localhost:3000`. The `buncrawl` volume keeps the SQLite database
+(`/data/buncrawl.db`) and stored files such as screenshots (`/data/artifacts`) across restarts and
+upgrades.
+
+## What's in the image
+
+- The buncrawl server, as a single binary.
+- Chrome for Testing (headless shell) 158 and Lightpanda 1.0.5, downloaded at a pinned version and
+  checked against a SHA-256 checksum when the image is built.
+- Fonts for Latin, CJK and emoji text, so pages and screenshots render real characters.
+
+Every published image passes the image check: real Chrome and Lightpanda renders of a local test
+page, then a server start with no configuration that must report both browsers available.
+
+The image is built for `linux/amd64` only: Chrome for Testing has no Linux arm64 build.
+
+## Configuration
+
+Pass any [environment variable](/self-hosting/configuration) with `-e`. Inside the image,
+`DATABASE_URL` and `BUNCRAWL_ARTIFACTS_PATH` already point at `/data`.
+
+## Tags
+
+| Tag | Image |
+| --- | --- |
+| `latest` | The newest release |
+| `0.1.1`, `0.1` | A release, or the newest patch of a minor version |
+| `main` | The newest commit on the main branch |
+
+## Users and sandboxing
+
+The container starts as root only long enough to make `/data` writable by the unprivileged `bun`
+user (UID 1000), then runs everything as `bun`, so the browsers never run as root. A bind-mounted
+host folder works whichever host user owns it.
+
+Docker's default seccomp profile blocks the user namespaces Chrome's own sandbox needs, so the
+image sets `BUNCRAWL_CHROME_NO_SANDBOX=1`. Each page still renders in its own worker process,
+behind buncrawl's network safety checks. Set it to `0` where the container may create user
+namespaces.
+
+## Health
+
+`GET /` answers `OK` without an API key, for health checks. `GET /v1/capabilities` reports which
+browsers started; see [Browsers](/self-hosting/browsers).

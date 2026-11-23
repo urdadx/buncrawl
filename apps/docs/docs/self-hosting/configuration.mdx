@@ -1,0 +1,44 @@
+---
+title: Configuration
+description: Every environment variable the buncrawl server reads, with its default.
+---
+
+The server is configured with environment variables. Every one is optional. Pass them with `-e` to
+Docker, set them in the shell for the binary, or put them in `apps/server/.env` when running from
+the repository.
+
+## Server
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PORT` | `3000` | Port the API listens on. |
+| `BUNCRAWL_API_KEY` | unset (API open) | Key clients must send as `Authorization: Bearer <key>`. Separate several with commas to rotate keys; each needs 16+ characters. See [Security](/self-hosting/security). |
+| `CORS_ORIGIN` | `*` | Value of `Access-Control-Allow-Origin`: which web pages may call the API from a browser. |
+| `NODE_ENV` | `production` | `development`, `production` or `test`. |
+
+## Storage
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `DATABASE_URL` | `file:data/buncrawl.db` (Docker: `file:/data/buncrawl.db`) | SQLite database file, as a `file:` URL. Relative paths start from the working directory. |
+| `BUNCRAWL_ARTIFACTS_PATH` | `data/artifacts` (Docker: `/data/artifacts`) | Folder for stored files such as screenshots. |
+| `BUNCRAWL_R2_ENDPOINT`, `BUNCRAWL_R2_BUCKET`, `BUNCRAWL_R2_ACCESS_KEY_ID`, `BUNCRAWL_R2_SECRET_ACCESS_KEY`, `BUNCRAWL_R2_REGION` | unset | Store files in Cloudflare R2 (or another S3-compatible service) instead of the folder. See [Storage](/self-hosting/storage). |
+| `REDIS_URL` | unset | Optional. Wakes job workers in other server processes immediately; without it, workers check the database every 250 ms. |
+
+## Browsers
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `BUN_CHROME_PATH` | found automatically | Chrome or Chromium executable. See [Browsers](/self-hosting/browsers). |
+| `BUNCRAWL_LIGHTPANDA_PATH` | found automatically | Lightpanda executable. |
+| `BUNCRAWL_CHROME_NO_SANDBOX` | unset (Docker: `1`) | `1` or `true` launches Chrome with `--no-sandbox`, for environments that block its sandbox. |
+| `BUNCRAWL_PROXY_URL` | unset | Proxy for browser rendering (Chrome and Lightpanda). Plain HTTP fetches don't use it. |
+
+## Webhooks
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `BUNCRAWL_WEBHOOK_SECRET` | unset | Signs webhooks for [Firecrawl v2](/api/firecrawl) requests, which carry no secret of their own. Needs 16+ characters; without it, v2 requests with a `webhook` are rejected. |
+
+An invalid value, such as a malformed URL or a key that's too short, stops the server at startup
+with the variable's name.

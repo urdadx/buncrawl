@@ -1,0 +1,76 @@
+---
+title: Jobs and events
+description: Read, page through and cancel crawl, map and batch scrape jobs, and stream their progress.
+---
+
+[Crawl](/api/crawl), [map](/api/map) and [batch scrape](/api/batch-scrape) requests start a job and
+return its `jobId`. Jobs are stored in the database, so they survive server restarts.
+
+## Read a job
+
+```bash
+curl -s "localhost:3000/v1/crawl/$JOB_ID?limit=50" -H "Authorization: Bearer $BUNCRAWL_API_KEY"
+```
+
+Use the path you submitted to: `/v1/crawl/:id`, `/v1/map/:id` or `/v1/batch/scrape/:id`.
+
+| Field | Description |
+| --- | --- |
+| `jobId`, `type` | The job and its kind. |
+| `state` | `queued`, `running`, `cancelling`, `completed`, `failed` or `cancelled`. |
+| `progress` | Counts of items: `total`, `queued`, `running`, `succeeded`, `failed`, `cancelled`. |
+| `limits` | `maxItems` and `timeoutMs`. |
+| `createdAt`, `updatedAt`, `startedAt`, `finishedAt` | Timestamps. |
+| `error` | Why the job failed: `{code, message, retryable}`. |
+| `items` | One page of results; see below. |
+| `next` | URL of the next page, present while there are more items. |
+
+A crawl or map item is `{url, finalUrl, depth, state, document?, error?}`; a batch item is
+`{itemId, index, url, state, document?, error?}`. `document` is the [scrape result](/api/scrape#response)
+of a completed item and `error` explains a failed one. Crawl responses also list the page's
+documents in `documents`, and map responses its URLs in `urls`.
+
+:::note
+In job results, screenshots and page content of 64 KiB or more are stored separately and appear as
+`artifact://` references. The API doesn't serve those files yet.
+:::
+
+## Pagination
+
+`cursor` (default `0`) and `limit` (1–100, default `100`) select the items. A page also stops at
+1 MiB of items, so follow `next` until it's absent rather than counting.
+
+## Cancel a job
+
+```bash
+curl -s -X DELETE "localhost:3000/v1/crawl/$JOB_ID" -H "Authorization: Bearer $BUNCRAWL_API_KEY"
+```
+
+Queued items are cancelled at once. The job is `cancelled` when nothing was running, otherwise
+`cancelling` until its running items finish. Results already finished stay readable.
+
+## Events
+
+`GET /v1/crawl/:id/events` (and the same for map and batch scrape) streams the job as
+[server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events):
+
+```bash
+curl -sN "localhost:3000/v1/crawl/$JOB_ID/events" -H "Authorization: Bearer $BUNCRAWL_API_KEY"
+```
+
+The stream starts with a `snapshot` event holding the job's current `state` and `progress`, then
+sends each change:
+
+| Event | Data | Sent for |
+| --- | --- | --- |
+| `state_changed` | `{state}` | Every job |
+| `progress` | `{progress}` | Every job |
+| `page_completed` | `{url, depth, state, finalUrl?, error?}` | Crawl and map |
+| `item_completed` | `{itemId, index}` | Batch scrape |
+
+Every event's data also has `jobId`, `sequence` and `timestamp`, and its SSE `id` is the sequence.
+To resume after a disconnect, send the last id in `Last-Event-ID` (browsers' `EventSource` does
+this), or pass `?after=<sequence>`. The stream closes after the job finishes; a finished job's last
+event is always its final `state_changed`.
+
+Events are kept for 7 days after a job finishes.

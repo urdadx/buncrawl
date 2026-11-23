@@ -1,0 +1,27 @@
+---
+title: map
+description: Discover a site's URLs from its sitemaps and links, one per line.
+---
+
+```bash
+buncrawl map <url> [options]
+```
+
+```bash
+buncrawl map example.com --limit 500
+buncrawl map example.com/docs --path-prefix --json
+```
+
+## Options
+
+| Option | Description |
+| --- | --- |
+| `--limit <n>` | Most URLs to discover. Default `100`. |
+| `--depth <n>` | Most links to follow from the start URL. Default `10`. |
+| `--timeout <ms>` | Deadline for the whole job. Default `120000`. |
+| `--subdomains` | Include the site's subdomains. Off by default. |
+| `--path-prefix` | Stay under the start URL's path. By default map covers the whole site. |
+| `--json` | Print the URLs as a JSON array instead of one per line. |
+| `--db <file>` | Keep the job in this SQLite file instead of memory. |
+
+Map runs the same job as [`POST /v1/map`](/api/map), in the buncrawl process itself.

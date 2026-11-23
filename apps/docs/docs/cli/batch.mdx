@@ -1,0 +1,28 @@
+---
+title: batch
+description: Scrape a list of URLs from a file or stdin.
+---
+
+```bash
+buncrawl batch <file | -> [options]
+```
+
+The file holds one URL per line. Blank lines and lines starting with `#` are skipped, and a URL
+without a scheme gets `https://`. Use `-` to read from stdin.
+
+```bash
+buncrawl batch urls.txt --format html > pages.jsonl
+cat urls.txt | buncrawl batch - --out pages
+```
+
+## Options
+
+Batch takes the [page options](/cli/scrape#options) `--format`, `--render`, `--no-render`,
+`--full-page` and `--wait`, plus `--out`, `--screenshots`, `--page-timeout` and `--db`, which work
+as in [crawl](/cli/crawl#options).
+
+## Output
+
+One JSON object per URL, in the shape [`GET /v1/batch/scrape/:id`](/api/batch-scrape)
+returns, with failed URLs reported in place. With `--out`, each page becomes a Markdown file
+instead.

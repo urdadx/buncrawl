@@ -1,0 +1,46 @@
+---
+title: Crawl
+description: POST /v1/crawl starts a job that follows links from a start page and scrapes every page found.
+---
+
+```bash
+curl -s localhost:3000/v1/crawl \
+  -H "Authorization: Bearer $BUNCRAWL_API_KEY" \
+  -H "content-type: application/json" \
+  -d '{"url": "https://example.com/docs", "maxPages": 50, "scrapeOptions": {"formats": ["markdown"]}}'
+```
+
+A crawl runs in the background. The response is `202` with the job's id:
+
+```json
+{ "jobId": "job_3f2c…", "type": "crawl", "state": "queued", "createdAt": "2026-11-23T10:00:00.000Z" }
+```
+
+Read its pages with [`GET /v1/crawl/:id`](/api/jobs), follow it live with
+[`/events`](/api/jobs#events), or get a [webhook](/api/webhooks).
+
+## Request
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `url` | string | required | Start page. |
+| `maxPages` | integer | `100` | Most pages to crawl, up to 100,000. |
+| `maxDepth` | integer | `10` | How many path segments below the start URL to go, up to 100. |
+| `maxBytes` | integer | 50 MiB | Most content to download in total, up to 1 GiB. |
+| `timeoutMs` | integer | `120000` | Deadline for the whole crawl, up to 7 days. |
+| `pathPrefix` | boolean | `true` | Stay under the start URL's path. Set `false` to crawl the whole site. |
+| `includeSubdomains` | boolean | `false` | Also crawl the site's subdomains. |
+| `scrapeOptions` | object | | [Scrape](/api/scrape#request) options for every page, without `url`. |
+| `webhook` | object | | [Webhook](/api/webhooks) to notify. |
+
+## Which pages are crawled
+
+- Links are followed only within the start URL's site: same protocol and port, with `www.` and the
+  bare domain counting as one site. Subdomains need `includeSubdomains`.
+- The site's sitemaps (from `robots.txt`, else `/sitemap.xml`) are read too, up to 20 of them.
+- `robots.txt` is followed for the user agent `Buncrawl`, including `Crawl-delay`. Pages it
+  disallows fail with `ROBOTS_BLOCKED`.
+- Each host gets one request at a time.
+
+Crawl pages are always scraped fresh; `maxAge` in `scrapeOptions` has no effect. Each page's
+`timeout` is capped by the time left in the crawl.
