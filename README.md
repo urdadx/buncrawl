@@ -189,6 +189,7 @@ buncrawl batch urls.txt --format html > pages.jsonl
 buncrawl/
 ├── apps/
 │   ├── web/         # Frontend application (React + TanStack Router)
+│   ├── docs/        # Documentation site (Blume)
 │   └── server/      # Backend API (Bun, TRPC)
 ├── packages/
 │   ├── ui/          # Shared shadcn/ui components and styles
@@ -201,6 +202,7 @@ buncrawl/
 - `pnpm run dev`: Start all applications in development mode
 - `pnpm run dev:web`: Start only the web application
 - `pnpm run dev:server`: Start only the server
+- `pnpm --filter docs dev`: Start the documentation site
 - `pnpm run db:push`: Push schema changes to database
 - `pnpm run db:generate`: Generate database client/types
 - `pnpm run db:migrate`: Run database migrations

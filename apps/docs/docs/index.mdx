@@ -1,0 +1,26 @@
+---
+title: Introduction
+description: Buncrawl scrapes, maps and crawls websites into clean Markdown, as an API server or a single command-line binary.
+---
+
+Buncrawl turns web pages into clean Markdown, HTML, links and screenshots. It runs as a
+Firecrawl-compatible API server or as a single binary on the command line, and renders JavaScript
+with Chrome or Lightpanda when they are installed.
+
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/urdadx/buncrawl/main/install.sh | sh
+```
+
+## Scrape a page
+
+```bash
+buncrawl example.com
+```
+
+## Run the API server
+
+```bash
+docker run -d -p 3000:3000 -v buncrawl:/data -e BUNCRAWL_API_KEY=change-me-to-16-plus-chars ghcr.io/urdadx/buncrawl:latest
+```

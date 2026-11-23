@@ -16,7 +16,7 @@
   "backend": "hono",
   "runtime": "bun",
   "frontend": ["tanstack-router"],
-  "addons": ["fumadocs", "oxlint"],
+  "addons": ["oxlint"],
   "examples": [],
   "auth": "none",
   "payments": "none",
