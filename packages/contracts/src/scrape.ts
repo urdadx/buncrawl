@@ -46,7 +46,7 @@ const cssSelectorSchema = v.pipe(
   v.maxLength(500, "Selector cannot exceed 500 characters"),
 );
 
-const jsonSelectorSchema: v.GenericSchema<JsonSelector> = v.lazy(() =>
+export const jsonSelectorSchema: v.GenericSchema<JsonSelector> = v.lazy(() =>
   v.union([
     cssSelectorSchema,
     v.strictObject({

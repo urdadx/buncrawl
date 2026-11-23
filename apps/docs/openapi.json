@@ -1,0 +1,2935 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Buncrawl API",
+    "version": "v1",
+    "description": "Scrape, crawl and map websites into clean Markdown, HTML, links, screenshots and structured JSON. Send your `BUNCRAWL_API_KEY` as a Bearer token. Firecrawl v2-compatible endpoints live under `/v2`; see the Firecrawl compatibility guide.",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Your buncrawl server (enter its URL if remote)"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Scrape",
+      "description": "Scrape one page."
+    },
+    {
+      "name": "Crawl",
+      "description": "Follow links from a start page and scrape every page."
+    },
+    {
+      "name": "Map",
+      "description": "Discover a site's URLs."
+    },
+    {
+      "name": "Batch scrape",
+      "description": "Scrape a list of URLs."
+    },
+    {
+      "name": "Artifacts",
+      "description": "Screenshots and large content from job results."
+    },
+    {
+      "name": "Server",
+      "description": "Health and capabilities."
+    }
+  ],
+  "paths": {
+    "/v1/scrape": {
+      "post": {
+        "tags": [
+          "Scrape"
+        ],
+        "operationId": "scrape",
+        "summary": "Scrape a page",
+        "description": "Fetches one page and returns it in the requested formats. JavaScript-heavy pages are rendered in a browser when `renderJs` is `auto` (the default) or `true`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScrapeRequest"
+              },
+              "example": {
+                "url": "https://example.com",
+                "formats": [
+                  "markdown",
+                  "links"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The scraped page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScrapeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request or URL is invalid (`INVALID_JSON`, `INVALID_REQUEST`, `INVALID_URL`, `BLOCKED_DESTINATION`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScrapeError"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "502": {
+            "description": "The page could not be fetched (`DNS_RESOLUTION_FAILED`, `FETCH_FAILED`, `INVALID_REDIRECT`, `TOO_MANY_REDIRECTS`, `RESPONSE_TOO_LARGE`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScrapeError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A browser was needed and none is available (`RENDERER_UNAVAILABLE`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScrapeError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The scrape timed out (`DEADLINE_EXCEEDED`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScrapeError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/crawl": {
+      "post": {
+        "tags": [
+          "Crawl"
+        ],
+        "operationId": "startCrawl",
+        "summary": "Start a crawl",
+        "description": "Starts a background job that follows links from `url` within the same site, respecting robots.txt, and scrapes each page with `scrapeOptions`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrawlRequest"
+              },
+              "example": {
+                "url": "https://example.com/docs",
+                "maxPages": 50,
+                "scrapeOptions": {
+                  "formats": [
+                    "markdown"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The job was queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobSubmitted"
+                },
+                "example": {
+                  "jobId": "job_3f2c9a1b7d4e4c0f8a6b5d2e1c0f9a8b",
+                  "type": "crawl",
+                  "state": "queued",
+                  "createdAt": "2026-11-23T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid (`INVALID_JSON`, `INVALID_REQUEST`, `INVALID_URL`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "description": "The server's job queue is full (`QUEUE_FULL`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/crawl/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The job ID returned when the job was submitted.",
+          "schema": {
+            "type": "string",
+            "pattern": "^job_[0-9a-f]{32}$"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Crawl"
+        ],
+        "operationId": "getCrawl",
+        "summary": "Get a crawl",
+        "description": "The job's state and progress, and one page of its items. Follow `next` until it is absent; a page also stops at 1 MiB of items. Screenshots and content of 64 KiB or more appear as `artifact://<key>` references; download them from `/v1/artifacts/{key}`.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Index of the first item to return.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Most items to return.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The job and a page of its items.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid job ID or pagination (`INVALID_JOB_ID`, `INVALID_PAGINATION`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "No job of this kind has this ID (`JOB_NOT_FOUND`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Crawl"
+        ],
+        "operationId": "cancelCrawl",
+        "summary": "Cancel a crawl",
+        "description": "Cancels queued items at once. The job is `cancelled` when nothing was running, else `cancelling` until running items finish. A finished job keeps its state.",
+        "responses": {
+          "200": {
+            "description": "Cancellation was requested.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobCancelled"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid job ID (`INVALID_JOB_ID`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "No job of this kind has this ID (`JOB_NOT_FOUND`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/crawl/{id}/events": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The job ID returned when the job was submitted.",
+          "schema": {
+            "type": "string",
+            "pattern": "^job_[0-9a-f]{32}$"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Crawl"
+        ],
+        "operationId": "streamCrawlEvents",
+        "summary": "Stream crawl events",
+        "description": "Server-sent events. The stream opens with a `snapshot` event (the job's `state` and `progress`), then sends each stored event with its sequence as the SSE `id`; each event's data is a `JobEvent`. Resume with `Last-Event-ID` or `?after=`. The stream closes after the job finishes.",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Resume after this event sequence. `Last-Event-ID` does the same.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "description": "The last event sequence received, to resume a stream.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "An event stream; each event's data is a `JobEvent` (see components).",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid job ID or event ID (`INVALID_JOB_ID`, `INVALID_EVENT_ID`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "No job of this kind has this ID (`JOB_NOT_FOUND`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/map": {
+      "post": {
+        "tags": [
+          "Map"
+        ],
+        "operationId": "startMap",
+        "summary": "Start a map",
+        "description": "Starts a background job that discovers the site's URLs from its sitemaps and links.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MapRequest"
+              },
+              "example": {
+                "url": "https://example.com",
+                "maxUrls": 500
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The job was queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobSubmitted"
+                },
+                "example": {
+                  "jobId": "job_3f2c9a1b7d4e4c0f8a6b5d2e1c0f9a8b",
+                  "type": "map",
+                  "state": "queued",
+                  "createdAt": "2026-11-23T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid (`INVALID_JSON`, `INVALID_REQUEST`, `INVALID_URL`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "description": "The server's job queue is full (`QUEUE_FULL`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/map/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The job ID returned when the job was submitted.",
+          "schema": {
+            "type": "string",
+            "pattern": "^job_[0-9a-f]{32}$"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Map"
+        ],
+        "operationId": "getMap",
+        "summary": "Get a map",
+        "description": "The job's state and progress, and one page of its items. Follow `next` until it is absent; a page also stops at 1 MiB of items. Screenshots and content of 64 KiB or more appear as `artifact://<key>` references; download them from `/v1/artifacts/{key}`.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Index of the first item to return.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Most items to return.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The job and a page of its items.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MapStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid job ID or pagination (`INVALID_JOB_ID`, `INVALID_PAGINATION`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "No job of this kind has this ID (`JOB_NOT_FOUND`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Map"
+        ],
+        "operationId": "cancelMap",
+        "summary": "Cancel a map",
+        "description": "Cancels queued items at once. The job is `cancelled` when nothing was running, else `cancelling` until running items finish. A finished job keeps its state.",
+        "responses": {
+          "200": {
+            "description": "Cancellation was requested.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobCancelled"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid job ID (`INVALID_JOB_ID`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "No job of this kind has this ID (`JOB_NOT_FOUND`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/map/{id}/events": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The job ID returned when the job was submitted.",
+          "schema": {
+            "type": "string",
+            "pattern": "^job_[0-9a-f]{32}$"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Map"
+        ],
+        "operationId": "streamMapEvents",
+        "summary": "Stream map events",
+        "description": "Server-sent events. The stream opens with a `snapshot` event (the job's `state` and `progress`), then sends each stored event with its sequence as the SSE `id`; each event's data is a `JobEvent`. Resume with `Last-Event-ID` or `?after=`. The stream closes after the job finishes.",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Resume after this event sequence. `Last-Event-ID` does the same.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "description": "The last event sequence received, to resume a stream.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "An event stream; each event's data is a `JobEvent` (see components).",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid job ID or event ID (`INVALID_JOB_ID`, `INVALID_EVENT_ID`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "No job of this kind has this ID (`JOB_NOT_FOUND`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/batch/scrape": {
+      "post": {
+        "tags": [
+          "Batch scrape"
+        ],
+        "operationId": "startBatchScrape",
+        "summary": "Start a batch scrape",
+        "description": "Starts a background job that scrapes up to 1,000 URLs, each with its own scrape options. The job has 120 seconds in total.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchScrapeRequest"
+              },
+              "example": {
+                "requests": [
+                  {
+                    "url": "https://example.com"
+                  },
+                  {
+                    "url": "https://example.org",
+                    "formats": [
+                      "html"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The job was queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobSubmitted"
+                },
+                "example": {
+                  "jobId": "job_3f2c9a1b7d4e4c0f8a6b5d2e1c0f9a8b",
+                  "type": "batch_scrape",
+                  "state": "queued",
+                  "createdAt": "2026-11-23T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid (`INVALID_JSON`, `INVALID_REQUEST`, `INVALID_URL`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "description": "The server's job queue is full (`QUEUE_FULL`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/batch/scrape/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The job ID returned when the job was submitted.",
+          "schema": {
+            "type": "string",
+            "pattern": "^job_[0-9a-f]{32}$"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Batch scrape"
+        ],
+        "operationId": "getBatchScrape",
+        "summary": "Get a batch scrape",
+        "description": "The job's state and progress, and one page of its items. Follow `next` until it is absent; a page also stops at 1 MiB of items. Screenshots and content of 64 KiB or more appear as `artifact://<key>` references; download them from `/v1/artifacts/{key}`.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Index of the first item to return.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Most items to return.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The job and a page of its items.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchScrapeStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid job ID or pagination (`INVALID_JOB_ID`, `INVALID_PAGINATION`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "No job of this kind has this ID (`JOB_NOT_FOUND`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Batch scrape"
+        ],
+        "operationId": "cancelBatchScrape",
+        "summary": "Cancel a batch scrape",
+        "description": "Cancels queued items at once. The job is `cancelled` when nothing was running, else `cancelling` until running items finish. A finished job keeps its state.",
+        "responses": {
+          "200": {
+            "description": "Cancellation was requested.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobCancelled"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid job ID (`INVALID_JOB_ID`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "No job of this kind has this ID (`JOB_NOT_FOUND`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/batch/scrape/{id}/events": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The job ID returned when the job was submitted.",
+          "schema": {
+            "type": "string",
+            "pattern": "^job_[0-9a-f]{32}$"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Batch scrape"
+        ],
+        "operationId": "streamBatchScrapeEvents",
+        "summary": "Stream batch scrape events",
+        "description": "Server-sent events. The stream opens with a `snapshot` event (the job's `state` and `progress`), then sends each stored event with its sequence as the SSE `id`; each event's data is a `JobEvent`. Resume with `Last-Event-ID` or `?after=`. The stream closes after the job finishes.",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Resume after this event sequence. `Last-Event-ID` does the same.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "description": "The last event sequence received, to resume a stream.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "An event stream; each event's data is a `JobEvent` (see components).",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid job ID or event ID (`INVALID_JOB_ID`, `INVALID_EVENT_ID`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "No job of this kind has this ID (`JOB_NOT_FOUND`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/artifacts/{key}": {
+      "parameters": [
+        {
+          "name": "key",
+          "in": "path",
+          "required": true,
+          "description": "The key from an `artifact://<key>` reference in a job result.",
+          "schema": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}\\.[a-z0-9]{1,10}$"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Artifacts"
+        ],
+        "operationId": "getArtifact",
+        "summary": "Download an artifact",
+        "description": "A screenshot or large page content referenced from a job result, with its original content type. Responses are sandboxed so stored HTML never runs scripts.",
+        "responses": {
+          "200": {
+            "description": "The stored file.",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "image/png"
+                }
+              },
+              "text/markdown": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The key is malformed (`INVALID_ARTIFACT_KEY`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "No artifact has this key (`ARTIFACT_NOT_FOUND`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The artifact store could not be read (`ARTIFACT_STORE_FAILED`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/capabilities": {
+      "get": {
+        "tags": [
+          "Server"
+        ],
+        "operationId": "getCapabilities",
+        "summary": "Get browser capabilities",
+        "description": "The report of the server's startup check: which browsers it found, their versions, and what they can do.",
+        "responses": {
+          "200": {
+            "description": "The capability report.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Capabilities"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "Server"
+        ],
+        "operationId": "health",
+        "summary": "Health check",
+        "description": "Answers `OK` without an API key.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The server is up.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "const": "OK"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "A key from the server's `BUNCRAWL_API_KEY`."
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "The server requires an API key and none, or a wrong one, was sent (`UNAUTHORIZED`).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ScrapeRequest": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "format": "uri",
+            "pattern": "^https?:\\/\\/",
+            "description": "The page to scrape: an `http` or `https` URL."
+          },
+          "formats": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "markdown",
+                    "html",
+                    "rawHtml",
+                    "links",
+                    "screenshots",
+                    "branding"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "const": "screenshot",
+                      "type": "string"
+                    },
+                    "fullPage": {
+                      "type": "boolean"
+                    },
+                    "viewport": {
+                      "type": "object",
+                      "properties": {
+                        "width": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 7680
+                        },
+                        "height": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 4320
+                        }
+                      },
+                      "required": [
+                        "width",
+                        "height"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "const": "json",
+                      "type": "string"
+                    },
+                    "selectors": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z_][\\w-]{0,63}$"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/components/schemas/JsonSelector"
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "selectors"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 7,
+            "description": "What to return, each format at most once.",
+            "default": [
+              "markdown"
+            ]
+          },
+          "renderJs": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "const": "auto",
+                "type": "string"
+              }
+            ],
+            "description": "`auto` renders in a browser only when the page needs JavaScript; `true` always renders; `false` never does.",
+            "default": "auto"
+          },
+          "onlyMainContent": {
+            "type": "boolean",
+            "description": "Keep only the main content, without navigation, headers and footers.",
+            "default": true
+          },
+          "waitForMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 30000,
+            "description": "Extra time to let a rendered page settle, in milliseconds."
+          },
+          "timeout": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 120000,
+            "description": "Deadline for the whole scrape, in milliseconds.",
+            "default": 30000
+          },
+          "maxAge": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2592000000,
+            "description": "Accept a cached result up to this many milliseconds old; `0` always scrapes fresh.",
+            "default": 0
+          },
+          "storeInCache": {
+            "type": "boolean",
+            "description": "Save the result for later `maxAge` requests.",
+            "default": true
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "JsonSelector": {
+        "anyOf": [
+          {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          {
+            "type": "object",
+            "properties": {
+              "selector": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "attribute": {
+                "type": "string",
+                "pattern": "^[A-Za-z_:][-\\w:.]{0,63}$"
+              },
+              "all": {
+                "type": "boolean"
+              },
+              "fields": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][\\w-]{0,63}$"
+                },
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonSelector"
+                }
+              }
+            },
+            "required": [
+              "selector"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "ScrapeDocument": {
+        "type": "object",
+        "properties": {
+          "markdown": {
+            "type": "string"
+          },
+          "html": {
+            "type": "string"
+          },
+          "rawHtml": {
+            "type": "string"
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "screenshot": {
+            "type": "string"
+          },
+          "branding": {
+            "type": "object",
+            "properties": {
+              "colorScheme": {
+                "enum": [
+                  "light",
+                  "dark"
+                ],
+                "type": "string"
+              },
+              "brandName": {
+                "type": "string"
+              },
+              "logo": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "colors": {
+                "type": "object",
+                "properties": {
+                  "primary": {
+                    "type": "string"
+                  },
+                  "secondary": {
+                    "type": "string"
+                  },
+                  "accent": {
+                    "type": "string"
+                  },
+                  "background": {
+                    "type": "string"
+                  },
+                  "textPrimary": {
+                    "type": "string"
+                  },
+                  "textSecondary": {
+                    "type": "string"
+                  },
+                  "link": {
+                    "type": "string"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              "fonts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "family": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "family"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "typography": {
+                "type": "object",
+                "properties": {
+                  "fontFamilies": {
+                    "type": "object",
+                    "properties": {
+                      "primary": {
+                        "type": "string"
+                      },
+                      "heading": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "fontStacks": {
+                    "type": "object",
+                    "properties": {
+                      "primary": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "heading": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "code": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "fontSizes": {
+                    "type": "object",
+                    "properties": {
+                      "h1": {
+                        "type": "string"
+                      },
+                      "h2": {
+                        "type": "string"
+                      },
+                      "h3": {
+                        "type": "string"
+                      },
+                      "body": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "lineHeights": {
+                    "type": "object",
+                    "properties": {
+                      "heading": {
+                        "type": "number"
+                      },
+                      "body": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "fontWeights": {
+                    "type": "object",
+                    "properties": {
+                      "regular": {
+                        "type": "number"
+                      },
+                      "bold": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              "spacing": {
+                "type": "object",
+                "properties": {
+                  "baseUnit": {
+                    "type": "number"
+                  },
+                  "borderRadius": {
+                    "type": "string"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              "components": {
+                "type": "object",
+                "properties": {
+                  "buttonPrimary": {
+                    "type": "object",
+                    "properties": {
+                      "background": {
+                        "type": "string"
+                      },
+                      "textColor": {
+                        "type": "string"
+                      },
+                      "borderColor": {
+                        "type": "string"
+                      },
+                      "borderRadius": {
+                        "type": "string"
+                      },
+                      "shadow": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "buttonSecondary": {
+                    "type": "object",
+                    "properties": {
+                      "background": {
+                        "type": "string"
+                      },
+                      "textColor": {
+                        "type": "string"
+                      },
+                      "borderColor": {
+                        "type": "string"
+                      },
+                      "borderRadius": {
+                        "type": "string"
+                      },
+                      "shadow": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "input": {
+                    "type": "object",
+                    "properties": {
+                      "background": {
+                        "type": "string"
+                      },
+                      "textColor": {
+                        "type": "string"
+                      },
+                      "borderColor": {
+                        "type": "string"
+                      },
+                      "borderRadius": {
+                        "type": "string"
+                      },
+                      "shadow": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              "images": {
+                "type": "object",
+                "properties": {
+                  "logo": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "logoHref": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "logoAlt": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "favicon": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "ogImage": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "json": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "sourceURL": {
+                "type": "string"
+              },
+              "finalURL": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "statusCode": {
+                "type": "integer"
+              },
+              "contentType": {
+                "type": "string"
+              },
+              "renderer": {
+                "type": "string"
+              },
+              "cacheState": {
+                "enum": [
+                  "hit",
+                  "miss"
+                ],
+                "type": "string"
+              },
+              "cachedAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "sourceURL",
+              "finalURL",
+              "statusCode",
+              "renderer"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "metadata"
+        ],
+        "additionalProperties": false
+      },
+      "ScrapeResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true,
+            "type": "boolean"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ScrapeDocument"
+          },
+          "warning": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ]
+      },
+      "ScrapeError": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": false,
+            "type": "boolean"
+          },
+          "code": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "success",
+          "code",
+          "error"
+        ]
+      },
+      "ApiError": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": false,
+            "type": "boolean"
+          },
+          "code": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "code",
+          "error"
+        ]
+      },
+      "CrawlRequest": {
+        "type": "object",
+        "properties": {
+          "webhook": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https:\\/\\/"
+              },
+              "secret": {
+                "type": "string",
+                "minLength": 16,
+                "maxLength": 256
+              },
+              "events": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "state_changed",
+                    "progress",
+                    "item_completed",
+                    "page_completed",
+                    "error"
+                  ],
+                  "type": "string"
+                },
+                "minItems": 1,
+                "maxItems": 5
+              }
+            },
+            "required": [
+              "url",
+              "secret"
+            ],
+            "additionalProperties": false,
+            "description": "Where to POST the job's events, signed with `secret`."
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "format": "uri",
+            "pattern": "^https?:\\/\\/",
+            "description": "Where the crawl starts."
+          },
+          "maxPages": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
+            "description": "Most pages to crawl.",
+            "default": 100
+          },
+          "maxDepth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "How many path segments below the start URL to go.",
+            "default": 10
+          },
+          "maxBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1073741824,
+            "description": "Most content to download in total, in bytes.",
+            "default": 52428800
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 604800000,
+            "description": "Deadline for the whole crawl, in milliseconds.",
+            "default": 120000
+          },
+          "includeSubdomains": {
+            "type": "boolean",
+            "description": "Also include the site's subdomains.",
+            "default": false
+          },
+          "pathPrefix": {
+            "type": "boolean",
+            "description": "Stay under the start URL's path; `false` crawls the whole site.",
+            "default": true
+          },
+          "scrapeOptions": {
+            "type": "object",
+            "properties": {
+              "formats": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "markdown",
+                        "html",
+                        "rawHtml",
+                        "links",
+                        "screenshots",
+                        "branding"
+                      ],
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "const": "screenshot",
+                          "type": "string"
+                        },
+                        "fullPage": {
+                          "type": "boolean"
+                        },
+                        "viewport": {
+                          "type": "object",
+                          "properties": {
+                            "width": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 7680
+                            },
+                            "height": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 4320
+                            }
+                          },
+                          "required": [
+                            "width",
+                            "height"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "const": "json",
+                          "type": "string"
+                        },
+                        "selectors": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z_][\\w-]{0,63}$"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/components/schemas/JsonSelector"
+                          }
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "selectors"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 7
+              },
+              "renderJs": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  }
+                ]
+              },
+              "onlyMainContent": {
+                "type": "boolean"
+              },
+              "waitForMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 30000
+              },
+              "timeout": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 120000
+              },
+              "maxAge": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2592000000
+              },
+              "storeInCache": {
+                "type": "boolean"
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "description": "Scrape options for every page: the fields of `ScrapeRequest` without `url`."
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "MapRequest": {
+        "type": "object",
+        "properties": {
+          "webhook": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https:\\/\\/"
+              },
+              "secret": {
+                "type": "string",
+                "minLength": 16,
+                "maxLength": 256
+              },
+              "events": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "state_changed",
+                    "progress",
+                    "item_completed",
+                    "page_completed",
+                    "error"
+                  ],
+                  "type": "string"
+                },
+                "minItems": 1,
+                "maxItems": 5
+              }
+            },
+            "required": [
+              "url",
+              "secret"
+            ],
+            "additionalProperties": false,
+            "description": "Where to POST the job's events, signed with `secret`."
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "format": "uri",
+            "pattern": "^https?:\\/\\/",
+            "description": "Where the map starts."
+          },
+          "maxUrls": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
+            "description": "Most URLs to discover.",
+            "default": 100
+          },
+          "maxDepth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "How many path segments below the start URL to go.",
+            "default": 10
+          },
+          "maxBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1073741824,
+            "description": "Most content to download in total, in bytes.",
+            "default": 52428800
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 604800000,
+            "description": "Deadline for the whole map, in milliseconds.",
+            "default": 120000
+          },
+          "includeSubdomains": {
+            "type": "boolean",
+            "description": "Also include the site's subdomains.",
+            "default": false
+          },
+          "pathPrefix": {
+            "type": "boolean",
+            "description": "Stay under the start URL's path.",
+            "default": false
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "BatchScrapeRequest": {
+        "type": "object",
+        "properties": {
+          "webhook": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https:\\/\\/"
+              },
+              "secret": {
+                "type": "string",
+                "minLength": 16,
+                "maxLength": 256
+              },
+              "events": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "state_changed",
+                    "progress",
+                    "item_completed",
+                    "page_completed",
+                    "error"
+                  ],
+                  "type": "string"
+                },
+                "minItems": 1,
+                "maxItems": 5
+              }
+            },
+            "required": [
+              "url",
+              "secret"
+            ],
+            "additionalProperties": false,
+            "description": "Where to POST the job's events, signed with `secret`."
+          },
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScrapeRequest"
+            },
+            "minItems": 1,
+            "maxItems": 1000,
+            "description": "The pages to scrape, each a full `ScrapeRequest`."
+          }
+        },
+        "required": [
+          "requests"
+        ],
+        "additionalProperties": false
+      },
+      "JobSubmitted": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "pattern": "^job_[0-9a-f]{32}$"
+          },
+          "type": {
+            "enum": [
+              "batch_scrape",
+              "map",
+              "crawl"
+            ],
+            "type": "string"
+          },
+          "state": {
+            "const": "queued",
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "jobId",
+          "type",
+          "state",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "JobError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "details": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ],
+        "additionalProperties": false
+      },
+      "JobProgress": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "queued": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "running": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "succeeded": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "failed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cancelled": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "total",
+          "queued",
+          "running",
+          "succeeded",
+          "failed",
+          "cancelled"
+        ],
+        "additionalProperties": false
+      },
+      "CrawlStatus": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "pattern": "^job_[0-9a-f]{32}$"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed",
+              "cancelling",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "$ref": "#/components/schemas/JobError"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/JobProgress"
+          },
+          "limits": {
+            "type": "object",
+            "properties": {
+              "maxItems": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000
+              },
+              "timeoutMs": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 604800000
+              }
+            },
+            "required": [
+              "maxItems",
+              "timeoutMs"
+            ],
+            "additionalProperties": false
+          },
+          "next": {
+            "type": "string",
+            "format": "uri"
+          },
+          "type": {
+            "const": "crawl",
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string"
+                },
+                "finalUrl": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "depth": {
+                  "type": "number"
+                },
+                "state": {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "completed",
+                    "failed",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                },
+                "document": {
+                  "$ref": "#/components/schemas/ScrapeDocument"
+                },
+                "error": {
+                  "$ref": "#/components/schemas/JobError"
+                }
+              },
+              "required": [
+                "url",
+                "finalUrl",
+                "depth",
+                "state"
+              ]
+            }
+          },
+          "documents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScrapeDocument"
+            }
+          }
+        },
+        "required": [
+          "jobId",
+          "state",
+          "createdAt",
+          "updatedAt",
+          "progress",
+          "limits",
+          "type",
+          "items",
+          "documents"
+        ]
+      },
+      "MapStatus": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "pattern": "^job_[0-9a-f]{32}$"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed",
+              "cancelling",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "$ref": "#/components/schemas/JobError"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/JobProgress"
+          },
+          "limits": {
+            "type": "object",
+            "properties": {
+              "maxItems": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000
+              },
+              "timeoutMs": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 604800000
+              }
+            },
+            "required": [
+              "maxItems",
+              "timeoutMs"
+            ],
+            "additionalProperties": false
+          },
+          "next": {
+            "type": "string",
+            "format": "uri"
+          },
+          "type": {
+            "const": "map",
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string"
+                },
+                "finalUrl": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "depth": {
+                  "type": "number"
+                },
+                "state": {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "completed",
+                    "failed",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                },
+                "document": {
+                  "$ref": "#/components/schemas/ScrapeDocument"
+                },
+                "error": {
+                  "$ref": "#/components/schemas/JobError"
+                }
+              },
+              "required": [
+                "url",
+                "finalUrl",
+                "depth",
+                "state"
+              ]
+            }
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "jobId",
+          "state",
+          "createdAt",
+          "updatedAt",
+          "progress",
+          "limits",
+          "type",
+          "items",
+          "urls"
+        ]
+      },
+      "BatchScrapeStatus": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "pattern": "^job_[0-9a-f]{32}$"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed",
+              "cancelling",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "$ref": "#/components/schemas/JobError"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/JobProgress"
+          },
+          "limits": {
+            "type": "object",
+            "properties": {
+              "maxItems": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000
+              },
+              "timeoutMs": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 604800000
+              }
+            },
+            "required": [
+              "maxItems",
+              "timeoutMs"
+            ],
+            "additionalProperties": false
+          },
+          "next": {
+            "type": "string",
+            "format": "uri"
+          },
+          "type": {
+            "const": "batch_scrape",
+            "type": "string"
+          },
+          "cancellationRequestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "itemId": {
+                  "type": "string",
+                  "pattern": "^item_[0-9a-f]{32}$"
+                },
+                "index": {
+                  "type": "number"
+                },
+                "url": {
+                  "type": "string"
+                },
+                "state": {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "completed",
+                    "failed",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                },
+                "document": {
+                  "$ref": "#/components/schemas/ScrapeDocument"
+                },
+                "error": {
+                  "$ref": "#/components/schemas/JobError"
+                }
+              },
+              "required": [
+                "itemId",
+                "index",
+                "url",
+                "state"
+              ]
+            }
+          }
+        },
+        "required": [
+          "jobId",
+          "state",
+          "createdAt",
+          "updatedAt",
+          "progress",
+          "limits",
+          "type",
+          "items"
+        ]
+      },
+      "JobCancelled": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "pattern": "^job_[0-9a-f]{32}$"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed",
+              "cancelling",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "jobId",
+          "state",
+          "requestedAt"
+        ]
+      },
+      "JobEvent": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "jobId": {
+                "type": "string",
+                "pattern": "^job_[0-9a-f]{32}$"
+              },
+              "sequence": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "event": {
+                "const": "state_changed",
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "queued",
+                  "running",
+                  "completed",
+                  "failed",
+                  "cancelling",
+                  "cancelled"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "jobId",
+              "sequence",
+              "timestamp",
+              "event",
+              "state"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "jobId": {
+                "type": "string",
+                "pattern": "^job_[0-9a-f]{32}$"
+              },
+              "sequence": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "event": {
+                "const": "progress",
+                "type": "string"
+              },
+              "progress": {
+                "$ref": "#/components/schemas/JobProgress"
+              }
+            },
+            "required": [
+              "jobId",
+              "sequence",
+              "timestamp",
+              "event",
+              "progress"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "jobId": {
+                "type": "string",
+                "pattern": "^job_[0-9a-f]{32}$"
+              },
+              "sequence": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "event": {
+                "const": "item_completed",
+                "type": "string"
+              },
+              "itemId": {
+                "type": "string",
+                "pattern": "^item_[0-9a-f]{32}$"
+              },
+              "index": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "jobId",
+              "sequence",
+              "timestamp",
+              "event",
+              "itemId",
+              "index"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "jobId": {
+                "type": "string",
+                "pattern": "^job_[0-9a-f]{32}$"
+              },
+              "sequence": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "event": {
+                "const": "page_completed",
+                "type": "string"
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "format": "uri",
+                "pattern": "^https?:\\/\\/"
+              },
+              "depth": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "state": {
+                "enum": [
+                  "completed",
+                  "failed"
+                ],
+                "type": "string"
+              },
+              "finalUrl": {
+                "type": "string",
+                "minLength": 1,
+                "format": "uri",
+                "pattern": "^https?:\\/\\/"
+              },
+              "error": {
+                "$ref": "#/components/schemas/JobError"
+              }
+            },
+            "required": [
+              "jobId",
+              "sequence",
+              "timestamp",
+              "event",
+              "url",
+              "depth",
+              "state"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "jobId": {
+                "type": "string",
+                "pattern": "^job_[0-9a-f]{32}$"
+              },
+              "sequence": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "event": {
+                "const": "error",
+                "type": "string"
+              },
+              "error": {
+                "$ref": "#/components/schemas/JobError"
+              }
+            },
+            "required": [
+              "jobId",
+              "sequence",
+              "timestamp",
+              "event",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "Capabilities": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true,
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "checkedAt": {
+                "type": "string"
+              },
+              "renderers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "enum": [
+                        "lightpanda",
+                        "webview"
+                      ],
+                      "type": "string"
+                    },
+                    "executable": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "version": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "capabilities": {
+                      "type": "object",
+                      "properties": {
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "browser": {
+                          "type": "boolean"
+                        },
+                        "javascript": {
+                          "type": "boolean"
+                        },
+                        "screenshots": {
+                          "type": "boolean"
+                        },
+                        "cdp": {
+                          "type": "boolean"
+                        },
+                        "computedStyles": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "available",
+                        "browser",
+                        "javascript",
+                        "screenshots",
+                        "cdp"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "executable",
+                    "version",
+                    "capabilities"
+                  ]
+                }
+              },
+              "summary": {
+                "type": "object",
+                "properties": {
+                  "available": {
+                    "type": "boolean"
+                  },
+                  "browser": {
+                    "type": "boolean"
+                  },
+                  "javascript": {
+                    "type": "boolean"
+                  },
+                  "screenshots": {
+                    "type": "boolean"
+                  },
+                  "cdp": {
+                    "type": "boolean"
+                  },
+                  "computedStyles": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "available",
+                  "browser",
+                  "javascript",
+                  "screenshots",
+                  "cdp"
+                ]
+              }
+            },
+            "required": [
+              "checkedAt",
+              "renderers",
+              "summary"
+            ]
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ]
+      }
+    }
+  }
+}

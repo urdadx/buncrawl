@@ -205,6 +205,7 @@ buncrawl/
 - `pnpm run dev:web`: Start only the web application
 - `pnpm run dev:server`: Start only the server
 - `pnpm --filter docs dev`: Start the documentation site
+- `pnpm --filter server openapi`: Regenerate `apps/docs/openapi.json` after changing a route or contract
 - `pnpm run db:push`: Push schema changes to database
 - `pnpm run db:generate`: Generate database client/types
 - `pnpm run db:migrate`: Run database migrations

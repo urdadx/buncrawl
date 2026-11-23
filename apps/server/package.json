@@ -14,7 +14,8 @@
     "compile": "bun build --compile --no-compile-autoload-dotenv --no-compile-autoload-bunfig --minify --sourcemap --bytecode --format=esm --conditions=buncrawl-executable ./src/executable.ts ./src/extract-worker.ts --outfile server",
     "dev": "bun run --hot src/index.ts",
     "start": "bun run dist/index.mjs",
-    "env:generate": "varlock codegen"
+    "env:generate": "varlock codegen",
+    "openapi": "bun scripts/openapi.ts"
   },
   "dependencies": {
     "@buncrawl/api": "workspace:*",
@@ -33,6 +34,7 @@
   "devDependencies": {
     "@buncrawl/config": "workspace:*",
     "@types/bun": "catalog:",
+    "@valibot/to-json-schema": "1.8.0",
     "tsdown": "^0.23.0",
     "typescript": "catalog:"
   }
