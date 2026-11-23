@@ -17,12 +17,6 @@ stdout, so they pipe into other tools; progress and errors go to stderr.
 | `buncrawl --version` | Print the version |
 | `buncrawl --help` | List every command and option |
 
-## URLs
-
-A URL without a scheme gets `https://`: `buncrawl example.com/docs` scrapes
-`https://example.com/docs`. There is no fallback to plain HTTP; type `http://` for a site that only
-serves it. Only `http` and `https` URLs are accepted.
-
 ## JavaScript rendering
 
 By default Buncrawl fetches each page over HTTP and starts a browser only when the page needs one.
