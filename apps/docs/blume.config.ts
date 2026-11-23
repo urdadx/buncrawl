@@ -3,7 +3,7 @@ import { openapi } from "blume/reference";
 
 export default defineConfig({
   title: "Buncrawl",
-  description: "Self-hosted, Firecrawl-compatible web scraping and crawling on Bun.",
+  description: "Give your AI agent structured internet data in Markdown, HTML, JSON and more.",
   // Generated from the server's contracts: `pnpm --filter server openapi` rewrites openapi.json.
   theme: {
     fonts: { display: "inter", body: "inter" },

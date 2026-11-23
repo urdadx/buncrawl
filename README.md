@@ -1,6 +1,6 @@
 # Buncrawl
 
-Self-hosted, Firecrawl-compatible web scraping and crawling on Bun.
+Give your AI agent structured internet data in Markdown, HTML, JSON and more.
 
 **[Documentation](https://buncrawl.urdadx.com)**
 
@@ -29,6 +29,8 @@ pnpm install
 ```bash
 pnpm run dev
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
