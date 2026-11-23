@@ -13,6 +13,7 @@ The server listens on port 3000 by default. Requests and responses are JSON.
 | [`POST /v1/batch/scrape`](/api/batch-scrape) | Start a job that scrapes a list of URLs |
 | [`GET`/`DELETE /v1/{crawl,map,batch/scrape}/:id`](/api/jobs) | Read a job's results, or cancel it |
 | [`GET /v1/{crawl,map,batch/scrape}/:id/events`](/api/jobs#events) | Stream a job's progress |
+| [`GET /v1/artifacts/:key`](/api/jobs#large-content-and-screenshots) | Download a screenshot or large page referenced in job results |
 | [`GET /v1/capabilities`](/self-hosting/browsers#the-startup-check) | Which browsers the server can use |
 | `GET /` | Health check; answers `OK` without a key |
 | [`/v2/*`](/api/firecrawl) | Firecrawl v2-compatible endpoints |
@@ -49,13 +50,13 @@ and `details`.
 
 | Status | Codes |
 | --- | --- |
-| `400` | `INVALID_JSON`, `INVALID_REQUEST`, `INVALID_URL`, `BLOCKED_DESTINATION`, `INVALID_JOB_ID`, `INVALID_PAGINATION`, `INVALID_EVENT_ID` |
+| `400` | `INVALID_JSON`, `INVALID_REQUEST`, `INVALID_URL`, `BLOCKED_DESTINATION`, `INVALID_JOB_ID`, `INVALID_PAGINATION`, `INVALID_EVENT_ID`, `INVALID_ARTIFACT_KEY` |
 | `401` | `UNAUTHORIZED` |
-| `404` | `JOB_NOT_FOUND` |
+| `404` | `JOB_NOT_FOUND`, `ARTIFACT_NOT_FOUND` |
 | `405` | `METHOD_NOT_ALLOWED` |
 | `429` | `QUEUE_FULL` |
 | `499` | `REQUEST_CANCELLED` (the client went away) |
-| `502` | `DNS_RESOLUTION_FAILED`, `FETCH_FAILED`, `INVALID_REDIRECT`, `TOO_MANY_REDIRECTS`, `RESPONSE_TOO_LARGE` |
+| `502` | `DNS_RESOLUTION_FAILED`, `FETCH_FAILED`, `INVALID_REDIRECT`, `TOO_MANY_REDIRECTS`, `RESPONSE_TOO_LARGE`, `ARTIFACT_STORE_FAILED` |
 | `503` | `RENDERER_UNAVAILABLE` (a browser was needed and none is available) |
 | `504` | `DEADLINE_EXCEEDED` |
 | `500` | Anything else, such as `EMPTY_CONTENT` or `EXTRACTION_FAILED` |

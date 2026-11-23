@@ -12,6 +12,7 @@ import {
   getCrawlFrontierPage,
   getCrawlProgress,
   getJob,
+  JobQueueFullError,
   requestJobCancellation,
   type Database,
 } from "@buncrawl/db";
@@ -67,10 +68,17 @@ export function createDiscoveryHandler(
       const submission = { ...parsed.output, url };
       const limits = crawlJobLimits(submission);
 
-      const { job } = await enqueueJob(db, {
-        submission,
-        limits: { maxItems: limits.maxPages, timeoutMs: limits.maxElapsedMs },
-      });
+      let job;
+      try {
+        ({ job } = await enqueueJob(db, {
+          submission,
+          limits: { maxItems: limits.maxPages, timeoutMs: limits.maxElapsedMs },
+        }));
+      } catch (error) {
+        if (error instanceof JobQueueFullError)
+          return failure(429, "QUEUE_FULL", "Job queue is full");
+        throw error;
+      }
 
       await notify(job.id).catch(() => undefined);
       return Response.json(

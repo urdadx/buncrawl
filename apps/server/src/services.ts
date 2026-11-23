@@ -1,5 +1,5 @@
 import { createArtifactKey, selectArtifactStore, type ArtifactStore } from "@buncrawl/artifacts";
-import { createArtifactRecord, createDb, migrateDb } from "@buncrawl/db";
+import { createArtifactRecord, createDb, getArtifactRecord, migrateDb } from "@buncrawl/db";
 import type { ScrapeDocument } from "@buncrawl/contracts";
 import { persistDocumentArtifacts } from "@buncrawl/jobs";
 
@@ -26,6 +26,17 @@ async function initializeServices(): Promise<void> {
   });
 
   console.info(`Artifact storage backend: ${artifactStore.backend}`);
+}
+
+/** A stored artifact's bytes and content type; undefined for a key that was never stored. */
+export async function readArtifact(
+  key: string,
+  signal?: AbortSignal,
+): Promise<{ data: Uint8Array; contentType: string } | undefined> {
+  await servicesReady;
+  const record = await getArtifactRecord(db, key);
+  if (!record) return undefined;
+  return { data: await artifactStore.get(key, signal), contentType: record.contentType };
 }
 
 export async function persistScreenshot(dataUrl: string, signal?: AbortSignal): Promise<string> {

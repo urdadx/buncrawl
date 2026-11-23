@@ -28,4 +28,7 @@ Other Firecrawl endpoints, such as extract, search and agent, return `404 UNSUPP
 - **Webhooks** need `BUNCRAWL_WEBHOOK_SECRET` on the server, because Firecrawl requests carry no
   secret; buncrawl signs deliveries with it. `headers` and `metadata` aren't supported.
 - **Errors:** timeouts come back as `408 SCRAPE_TIMEOUT`, as in Firecrawl.
+- **Screenshots** in crawl and batch results are URLs to `/v1/artifacts/…` on your server, which
+  need your API key like every other request. Large page content comes back inline, as in
+  Firecrawl.
 - **Credits:** `creditsUsed` counts succeeded pages.

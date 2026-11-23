@@ -14,7 +14,8 @@ Remote databases aren't supported; `DATABASE_URL` must be a `file:` URL.
 ## Stored files
 
 Screenshots, and page content of 64 KiB or more in job results, are stored as files under
-`BUNCRAWL_ARTIFACTS_PATH`.
+`BUNCRAWL_ARTIFACTS_PATH`. Clients download them with
+[`GET /v1/artifacts/:key`](/api/jobs#large-content-and-screenshots).
 
 To store them in Cloudflare R2 instead, set `BUNCRAWL_R2_ENDPOINT`, `BUNCRAWL_R2_BUCKET`,
 `BUNCRAWL_R2_ACCESS_KEY_ID` and `BUNCRAWL_R2_SECRET_ACCESS_KEY` (and `BUNCRAWL_R2_REGION` if your

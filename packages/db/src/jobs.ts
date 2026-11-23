@@ -357,7 +357,12 @@ export async function setJobResult(
   return job;
 }
 
+/**
+ * Fails a whole job: an `error` event with the reason, then the final `state_changed`. A job that
+ * already finished gets neither, since nothing may follow its terminal event.
+ */
 export async function failJob(db: Database, jobId: string, error: JobError, now = new Date()) {
+  await appendJobEvent(db, jobId, "error", { error }, now);
   return transitionJob(db, jobId, "failed", { error, finishedAt: now }, now);
 }
 

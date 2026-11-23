@@ -1,6 +1,7 @@
 import type { Database } from "@buncrawl/db";
 import type { RendererCapabilityReport } from "@buncrawl/renderer";
 
+import { artifactRoutes } from "./artifacts";
 import { batchScrapeRoutes } from "./batch-scrape";
 import { capabilitiesRoutes } from "./capabilities";
 import { crawlRoutes } from "./crawl";
@@ -11,6 +12,7 @@ import { scrapeRoutes } from "./scrape";
 import { trpcRoutes } from "./trpc";
 
 export {
+  artifactRoutes,
   batchScrapeRoutes,
   capabilitiesRoutes,
   crawlRoutes,
@@ -31,5 +33,6 @@ export function createRoutes(db: Database, capabilities: Promise<RendererCapabil
     ...mapRoutes(db),
     ...crawlRoutes(db),
     ...firecrawlRoutes(db),
+    ...artifactRoutes(),
   };
 }

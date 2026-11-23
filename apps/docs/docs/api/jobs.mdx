@@ -30,10 +30,18 @@ A crawl or map item is `{url, finalUrl, depth, state, document?, error?}`; a bat
 of a completed item and `error` explains a failed one. Crawl responses also list the page's
 documents in `documents`, and map responses its URLs in `urls`.
 
-:::note
-In job results, screenshots and page content of 64 KiB or more are stored separately and appear as
-`artifact://` references. The API doesn't serve those files yet.
-:::
+### Large content and screenshots
+
+In job results, screenshots and page content of 64 KiB or more are stored separately. Their fields
+hold a reference such as `artifact://3f2c9a….png`; download it from `/v1/artifacts/` with the same
+key:
+
+```bash
+curl -s "localhost:3000/v1/artifacts/3f2c9a….png" -H "Authorization: Bearer $BUNCRAWL_API_KEY" -o page.png
+```
+
+The response has the file's content type. An unknown key gets `404 ARTIFACT_NOT_FOUND`. Stored HTML
+is served sandboxed, so opening it in a browser never runs its scripts.
 
 ## Pagination
 
@@ -67,6 +75,7 @@ sends each change:
 | `progress` | `{progress}` | Every job |
 | `page_completed` | `{url, depth, state, finalUrl?, error?}` | Crawl and map |
 | `item_completed` | `{itemId, index}` | Batch scrape |
+| `error` | `{error}` | A crawl or map job that fails, just before its final `state_changed` |
 
 Every event's data also has `jobId`, `sequence` and `timestamp`, and its SSE `id` is the sequence.
 To resume after a disconnect, send the last id in `Last-Event-ID` (browsers' `EventSource` does

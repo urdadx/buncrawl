@@ -399,6 +399,41 @@ test("crawl errors read every canonical page and separate robots-blocked URLs", 
   });
 });
 
+test("crawl status resolves artifact references the Firecrawl way", async () => {
+  const key = `${"c".repeat(32)}`;
+  const document = {
+    metadata: { sourceURL: origin, finalURL: origin, statusCode: 200, renderer: "webview" },
+    markdown: `artifact://${key}.md`,
+    screenshot: `artifact://${key}.png`,
+  };
+  const unused = async () => new Response(null, { status: 500 });
+  const v2 = createFirecrawlV2Handlers({
+    scrape: unused,
+    batchScrape: unused,
+    map: unused,
+    crawl: async () =>
+      Response.json({
+        state: "completed",
+        progress: { total: 1, queued: 0, running: 0, succeeded: 1, failed: 0, cancelled: 0 },
+        createdAt: "2026-11-23T00:00:00.000Z",
+        items: [{ url: origin, state: "completed", document }],
+        documents: [document],
+      }),
+    readArtifact: async (requested) =>
+      requested === `${key}.md`
+        ? { data: new TextEncoder().encode("# Large page"), contentType: "text/markdown" }
+        : undefined,
+  });
+  const response = await v2.crawl(
+    new Request(`${base}/crawl/job_${"0".repeat(32)}`),
+    `job_${"0".repeat(32)}`,
+  );
+  const body = (await response.json()) as { data: { markdown: string; screenshot: string }[] };
+  // Large text comes back inline; a screenshot becomes a URL clients can download.
+  expect(body.data[0]!.markdown).toBe("# Large page");
+  expect(body.data[0]!.screenshot).toBe(new URL(`/v1/artifacts/${key}.png`, base).href);
+});
+
 test("crawl webhooks need the server secret", async () => {
   const unused = async () => new Response(null, { status: 500 });
   const v2 = createFirecrawlV2Handlers({

@@ -3,6 +3,7 @@ import { scrape } from "@buncrawl/scrape";
 
 import { ENV } from "#env";
 import { endpoint } from "../http";
+import { readStoredArtifact } from "./artifacts";
 import { createBatchScrapeHandler } from "./v1/batch-scrape";
 import { createDiscoveryHandler } from "./v1/discovery";
 import { createScrapeHandler } from "./v1/scrape";
@@ -17,6 +18,7 @@ export function firecrawlRoutes(db: Database) {
     crawl: createDiscoveryHandler(db, "crawl"),
     map: createDiscoveryHandler(db, "map"),
     webhookSecret: ENV.BUNCRAWL_WEBHOOK_SECRET,
+    readArtifact: readStoredArtifact,
   });
   return {
     "/v2/scrape": endpoint(v2.scrape),

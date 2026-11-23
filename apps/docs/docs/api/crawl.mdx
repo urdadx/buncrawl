@@ -16,7 +16,8 @@ A crawl runs in the background. The response is `202` with the job's id:
 { "jobId": "job_3f2c…", "type": "crawl", "state": "queued", "createdAt": "2026-11-23T10:00:00.000Z" }
 ```
 
-Read its pages with [`GET /v1/crawl/:id`](/api/jobs), follow it live with
+When the server's job queue is full, the request gets `429 QUEUE_FULL` instead. Read its pages with
+[`GET /v1/crawl/:id`](/api/jobs), follow it live with
 [`/events`](/api/jobs#events), or get a [webhook](/api/webhooks).
 
 ## Request

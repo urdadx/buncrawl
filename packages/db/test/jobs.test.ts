@@ -290,6 +290,11 @@ describe("job event ordering", () => {
 
     const { events, last } = await terminalLast(db, job.id);
     expect(last).toMatchObject({ type: "state_changed", payload: { state: "failed" } });
+    // The failure's reason comes right before the final state, so webhooks and SSE clients get it.
+    expect(events.at(-2)).toMatchObject({
+      type: "error",
+      payload: { error: { code: "DISCOVERY_FAILED", message: "boom", retryable: false } },
+    });
     // The internal kickoff item is not a user-visible item.
     expect(events.some((event) => event.type === "item_completed")).toBe(false);
     // Progress counts pages (2 queued), never the single kickoff item.

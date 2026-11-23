@@ -1,5 +1,7 @@
 import type { JobError, ScrapeDocument, ScrapeResponse } from "@buncrawl/contracts";
 
+import { artifactUrl, type ReadArtifact } from "../artifacts";
+
 import {
   createIssues,
   isObject,
@@ -26,6 +28,8 @@ export interface FirecrawlV2Options {
   webhookSecret?: string;
   /** How often a synchronous map polls its canonical job. */
   mapPollMs?: number;
+  /** Reads stored artifacts, so job documents can carry their large content inline. */
+  readArtifact?: ReadArtifact;
 }
 
 type JobKind = "batch/scrape" | "crawl";
@@ -129,7 +133,10 @@ export function createFirecrawlV2Handlers(options: FirecrawlV2Options) {
       if (limit !== null) nextUrl.searchParams.set("limit", limit);
       next = nextUrl.href;
     }
-    return Response.json(toFirecrawlJobStatus(job, documents, next));
+    const resolved = await Promise.all(
+      documents.map((document) => resolveArtifacts(document, request.url, options.readArtifact)),
+    );
+    return Response.json(toFirecrawlJobStatus(job, resolved, next));
   }
 
   async function cancel(request: Request, kind: JobKind, id: string): Promise<Response> {
@@ -322,4 +329,27 @@ function canonicalRequest(request: Request, path: string, method: string, body?:
       ? {}
       : { body: JSON.stringify(body), headers: { "content-type": "application/json" } }),
   });
+}
+
+/**
+ * Firecrawl documents carry their content inline and screenshots as URLs, but job results store
+ * large content and screenshots as `artifact://` references. A screenshot becomes its
+ * `/v1/artifacts` URL, and large text is read back when the store is available.
+ */
+async function resolveArtifacts(
+  document: ScrapeDocument,
+  base: string,
+  read: ReadArtifact | undefined,
+): Promise<ScrapeDocument> {
+  const resolved = { ...document };
+  const screenshot = artifactUrl(resolved.screenshot, base);
+  if (screenshot) resolved.screenshot = screenshot;
+  if (!read) return resolved;
+  for (const field of ["markdown", "html", "rawHtml"] as const) {
+    const value = resolved[field];
+    if (typeof value !== "string" || !value.startsWith("artifact://")) continue;
+    const artifact = await read(value.slice("artifact://".length)).catch(() => undefined);
+    if (artifact) resolved[field] = new TextDecoder().decode(artifact.data);
+  }
+  return resolved;
 }
