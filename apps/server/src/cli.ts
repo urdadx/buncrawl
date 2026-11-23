@@ -35,8 +35,9 @@ Map and crawl options:
       --limit <n>          Most URLs to discover or pages to crawl (default 100)
       --depth <n>          Most links to follow from the start URL (default 10)
       --timeout <ms>       Deadline for the whole job (default 120000)
-      --subdomains         Include the site's subdomains
-      --path-prefix        Stay under the start URL's path
+      --subdomains         Include the site's subdomains (off by default)
+      --no-path-prefix     Leave the start URL's path (crawl stays under it by default;
+                           map covers the whole site unless given --path-prefix)
 
 Crawl and batch options:
       --out <dir>          Write each page as Markdown into <dir> instead of printing JSON Lines
@@ -216,8 +217,9 @@ function parseJob(command: JobCommand, args: string[]): CliCommand {
     if (!/^\d+$/.test(value)) return usageError(`--${option} takes a whole number`);
     body[field] = Number(value);
   }
-  if (values.subdomains) body.includeSubdomains = true;
-  if (values["path-prefix"]) body.pathPrefix = true;
+  // Both take --no-<flag>: crawl stays under the start URL's path unless told otherwise.
+  if (values.subdomains !== undefined) body.includeSubdomains = values.subdomains;
+  if (values["path-prefix"] !== undefined) body.pathPrefix = values["path-prefix"];
   if (command === "crawl") body.scrapeOptions = page;
   const problem = validateJob(command, body);
   if (problem) return usageError(problem);

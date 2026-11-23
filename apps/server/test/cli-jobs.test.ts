@@ -87,6 +87,16 @@ describe("parseCli job commands", () => {
     });
   });
 
+  test("passes --no-path-prefix through, so a crawl can leave the start URL's path", () => {
+    expect(parseCli(["crawl", `${origin}/docs`, "--no-path-prefix"])).toMatchObject({
+      body: { url: `${origin}/docs`, pathPrefix: false },
+    });
+    expect(parseCli(["map", origin, "--path-prefix", "--no-subdomains"])).toMatchObject({
+      body: { pathPrefix: true, includeSubdomains: false },
+    });
+    expect(parseCli(["crawl", origin])).not.toMatchObject({ body: { pathPrefix: false } });
+  });
+
   test("defers batch URLs to the file and keeps the page options", () => {
     expect(parseCli(["batch", "urls.txt", "-f", "html", "--no-render"])).toEqual({
       kind: "job",
