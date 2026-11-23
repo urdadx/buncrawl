@@ -5,9 +5,6 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-      secrets:
-        - web_env
-        - server_env
       args:
         VITE_SERVER_URL: http://localhost:3000
     init: true
@@ -60,10 +57,3 @@ services:
         bind:
           create_host_path: false
     restart: unless-stopped
-
-# BuildKit makes these available only while install/build commands run.
-secrets:
-  web_env:
-    file: apps/web/.env
-  server_env:
-    file: apps/server/.env

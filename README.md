@@ -95,12 +95,14 @@ which browsers the image found.
 - Stop: pnpm run docker:down
 
 Set `BUNCRAWL_API_KEY` (at least 16 characters, e.g. `openssl rand -hex 24`) in `apps/server/.env`
-before exposing the server: clients then send `Authorization: Bearer <key>`, as Firecrawl SDKs
+(create it; it's optional) before exposing the server: clients then send `Authorization: Bearer <key>`, as Firecrawl SDKs
 do. Several keys can be listed, separated by commas, to rotate them. Without it the API is open to
 anyone who can reach it, and the server logs a warning at startup. `GET /` (health) and the
 dashboard's `/trpc` health query stay public.
 
-Environment variables are read from each app's `.env` file (baked into web builds for public variables) and overridden in `docker-compose.yml` for container networking.
+No `.env` file is needed to build or start the stack. Compose reads `apps/server/.env` when it
+exists, for settings such as `BUNCRAWL_API_KEY`, and `docker-compose.yml` sets the container
+paths and networking. The dashboard's API URL comes from the `VITE_SERVER_URL` build argument.
 
 Docker Compose persists SQLite at `./.data/buncrawl.db` and artifacts under
 `./.data/artifacts`. The server applies its required storage schema during startup.
