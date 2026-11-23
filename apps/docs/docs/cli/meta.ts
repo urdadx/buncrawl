@@ -1,7 +1,10 @@
 import { defineMeta } from "blume";
 
+import { icons } from "../../icons";
+
 export default defineMeta({
   title: "Command line",
-  order: 2,
+  icon: icons.terminal,
+  order: 3,
   pages: ["index", "scrape", "map", "crawl", "batch"],
 });

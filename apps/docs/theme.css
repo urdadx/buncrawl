@@ -1,0 +1,56 @@
+/* Warm palette: orange accent on a warm off-white (light) or charcoal (dark) background. */
+:root {
+  --blume-accent: #ff5410;
+  --blume-background: #f6f5f3;
+  --blume-foreground: #1d1d1d;
+  --blume-muted: #edebe8;
+  --blume-muted-foreground: #46413f;
+  --blume-border: #dadada;
+}
+
+:root[data-theme="dark"] {
+  --blume-accent: #ff8a49;
+  --blume-background: #1d1d1d;
+  --blume-foreground: #fff6f2;
+  --blume-muted: #262626;
+  --blume-muted-foreground: #bdb8b5;
+  --blume-border: #323232;
+  --blume-code-background: #161616;
+}
+
+/* The current page in the sidebar, and the current section in "On this page", take the accent. */
+.blume-nav-link[aria-current="page"] {
+  color: var(--blume-accent);
+  background-color: color-mix(in srgb, var(--blume-accent) 10%, transparent);
+}
+
+blume-toc a[aria-current="location"] {
+  color: var(--blume-accent);
+}
+
+/* Section icons always take the accent. A page row's label and icon take it on hover, and the
+   current page keeps it. */
+aside .blume-nav-heading-link svg,
+aside :is(.blume-nav-link, .blume-nav-heading-link):hover,
+aside :is(.blume-nav-link, .blume-nav-heading-link):hover svg,
+aside .blume-nav-link[aria-current="page"] svg {
+  color: var(--blume-accent);
+}
+
+/* Duotone icons need a little more room than Blume's 14px to read as two tones. Blume sizes the
+   icon's wrapper with an inline style, which only !important overrides. */
+aside :is(.blume-nav-link, .blume-nav-heading-link) span:has(> svg),
+aside :is(.blume-nav-link, .blume-nav-heading-link) svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+/* Sidebar icons sit back at 70%; hovering a row or being on its page brings them to full strength. */
+aside :is(.blume-nav-link, .blume-nav-heading-link) svg {
+  opacity: 0.7;
+}
+
+aside :is(.blume-nav-link, .blume-nav-heading-link):hover svg,
+aside .blume-nav-link[aria-current="page"] svg {
+  opacity: 1;
+}

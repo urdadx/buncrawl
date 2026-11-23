@@ -8,7 +8,7 @@ buncrawl scrape <url> [options]
 ```
 
 `buncrawl <url>` does the same. With one format, the result prints as-is; with several, or with
-`--json`, buncrawl prints the full API response as JSON.
+`--json`, Buncrawl prints the full API response as JSON.
 
 ```bash
 buncrawl example.com
@@ -36,5 +36,5 @@ buncrawl example.com --render --format html --screenshot page.png
 - `--json` prints the same response as [`POST /v1/scrape`](/api/scrape), including metadata
   such as the final URL, status code and the renderer used.
 
-On failure buncrawl prints `buncrawl: CODE: message` to stderr and exits `1`; with `--json`, the
+On failure Buncrawl prints `buncrawl: CODE: message` to stderr and exits `1`; with `--json`, the
 failure response goes to stdout instead.

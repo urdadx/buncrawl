@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: Every environment variable the buncrawl server reads, with its default.
+description: Every environment variable the Buncrawl server reads, with its default.
 ---
 
 The server is configured with environment variables. Every one is optional. Pass them with `-e` to
@@ -38,7 +38,7 @@ the repository.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `BUNCRAWL_WEBHOOK_SECRET` | unset | Signs webhooks for [Firecrawl v2](/api/firecrawl) requests, which carry no secret of their own. Needs 16+ characters; without it, v2 requests with a `webhook` are rejected. |
+| `BUNCRAWL_WEBHOOK_SECRET` | unset | Signs webhooks for [Firecrawl v2](/api/migrate-from-firecrawl) requests, which carry no secret of their own. Needs 16+ characters; without it, v2 requests with a `webhook` are rejected. |
 
 An invalid value, such as a malformed URL or a key that's too short, stops the server at startup
 with the variable's name.

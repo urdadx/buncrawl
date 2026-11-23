@@ -1,0 +1,92 @@
+---
+title: Migrate from Firecrawl
+description: Point your Firecrawl SDK or client at buncrawl.
+---
+
+Buncrawl serves Firecrawl's v2 API under `/v2`, so existing code keeps working with two changes:
+the URL and the API key.
+
+<Steps>
+<Step title="Start Buncrawl">
+
+```sh
+docker run -p 3000:3000 \
+  -e BUNCRAWL_API_KEY=change-me-to-16-plus-chars \
+  ghcr.io/urdadx/buncrawl:latest
+```
+
+</Step>
+<Step title="Point your client at it">
+
+Set the API URL to your server and the API key to `BUNCRAWL_API_KEY`.
+
+<CodeGroup>
+
+```ts title="Node"
+import { Firecrawl } from "firecrawl";
+
+const firecrawl = new Firecrawl({
+  apiUrl: "http://localhost:3000",
+  apiKey: "change-me-to-16-plus-chars",
+});
+```
+
+```python title="Python"
+from firecrawl import Firecrawl
+
+firecrawl = Firecrawl(
+    api_url="http://localhost:3000",
+    api_key="change-me-to-16-plus-chars",
+)
+```
+
+```sh title="curl"
+curl http://localhost:3000/v2/scrape \
+  -H "Authorization: Bearer change-me-to-16-plus-chars" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com"}'
+```
+
+</CodeGroup>
+
+</Step>
+<Step title="Check the formats you request">
+
+Supported: `markdown`, `html`, `rawHtml`, `links`, `screenshot` and `branding`.
+
+Not supported: `json`, `summary`, `images` and `changeTracking`. For structured JSON, use
+[`/v1/scrape`](/api/scrape#structured-json).
+
+</Step>
+<Step title="Remove unsupported options">
+
+These return `400 UNSUPPORTED_OPTION`: `actions`, `headers`, `includeTags`, `includePaths`,
+`location` and `ignoreRobotsTxt: true`.
+
+</Step>
+<Step title="Set a webhook secret">
+
+Only if you use webhooks. Set `BUNCRAWL_WEBHOOK_SECRET` (16+ characters) on the server; Buncrawl
+signs deliveries with it.
+
+</Step>
+</Steps>
+
+## Endpoints
+
+| Endpoint | Supported |
+| --- | --- |
+| `/v2/scrape` | Yes |
+| `/v2/crawl` | Yes |
+| `/v2/batch/scrape` | Yes |
+| `/v2/map` | Yes |
+| `/v2/extract`, `/v2/search`, `/v2/agent` | No, returns `404 UNSUPPORTED_ENDPOINT` |
+
+## Differences
+
+| | Firecrawl | Buncrawl |
+| --- | --- | --- |
+| Screenshots in crawl and batch results | Public URLs | `/v1/artifacts/…` URLs that need your API key |
+| `creditsUsed` | Billed credits | Succeeded pages |
+| `blockAds`, `removeBase64Images` | Applied | Accepted and ignored |
+| Webhook `headers` and `metadata` | Supported | Not supported |

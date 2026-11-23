@@ -1,11 +1,11 @@
 ---
 title: Storage
-description: Where buncrawl keeps its database, stored files and cache, and how long it keeps them.
+description: Where Buncrawl keeps its database, stored files and cache, and how long it keeps them.
 ---
 
 ## Database
 
-buncrawl keeps jobs, results, the crawl queue and the scrape cache in one SQLite file
+Buncrawl keeps jobs, results, the crawl queue and the scrape cache in one SQLite file
 (`DATABASE_URL`). Jobs survive restarts: a server that stops mid-crawl picks the crawl up again
 when it starts. Back up this file, or the Docker `/data` volume, to keep your data.
 
@@ -19,7 +19,7 @@ Screenshots, and page content of 64 KiB or more in job results, are stored as fi
 
 To store them in Cloudflare R2 instead, set `BUNCRAWL_R2_ENDPOINT`, `BUNCRAWL_R2_BUCKET`,
 `BUNCRAWL_R2_ACCESS_KEY_ID` and `BUNCRAWL_R2_SECRET_ACCESS_KEY` (and `BUNCRAWL_R2_REGION` if your
-provider needs it). buncrawl uses R2 only when all four are set and the bucket passes a check at
+provider needs it). Buncrawl uses R2 only when all four are set and the bucket passes a check at
 startup; otherwise it uses the folder. The server logs which one it picked.
 
 ## Scrape cache

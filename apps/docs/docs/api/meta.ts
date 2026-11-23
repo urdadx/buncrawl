@@ -1,7 +1,10 @@
 import { defineMeta } from "blume";
 
+import { icons } from "../../icons";
+
 export default defineMeta({
   title: "API",
-  order: 3,
-  pages: ["index", "scrape", "crawl", "map", "batch-scrape", "jobs", "webhooks", "firecrawl"],
+  icon: icons.api,
+  order: 2,
+  pages: ["index", "scrape", "crawl", "map", "batch-scrape", "jobs", "webhooks", "migrate-from-firecrawl"],
 });
